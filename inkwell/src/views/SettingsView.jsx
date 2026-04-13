@@ -4,7 +4,7 @@ import { useToast } from '../components/Toast';
 import Tooltip from '../components/Tooltip';
 import {
   ArrowLeft, Monitor, Keyboard, BookOpen, Palette, Info,
-  Eye, ChevronRight, RotateCcw, Download, Upload, Plus, Trash2
+  Eye, ChevronRight, RotateCcw, Download, Upload, Plus, Trash2, RefreshCw
 } from 'lucide-react';
 import './SettingsView.css';
 
@@ -39,7 +39,8 @@ const SettingRow = ({ label, description, children }) => (
 const SettingsView = () => {
   const {
     settings, updateSettings, addCategory, categories, removeCategory,
-    clearThumbnailCache
+    clearThumbnailCache, theme, setTheme, shortcuts, updateShortcuts,
+    setCurrentView
   } = useAppContext();
 
   const isSettingsWindow = React.useMemo(() => {
@@ -49,8 +50,94 @@ const SettingsView = () => {
   const addToast = useToast();
   const [activeTab, setActiveTab] = useState('appearance');
   const [listeningKey, setListeningKey] = useState(null);
+  const fileInputRef = React.useRef(null);
 
   const customFolders = categories.filter(c => c.id !== 'all');
+
+  const handleCustomThemeUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = 100;
+        canvas.height = 100;
+        ctx.drawImage(img, 0, 0, 100, 100);
+
+        const imageData = ctx.getImageData(0, 0, 100, 100).data;
+        let r = 0, g = 0, b = 0;
+        for (let i = 0; i < imageData.length; i += 4) {
+          r += imageData[i];
+          g += imageData[i + 1];
+          b += imageData[i + 2];
+        }
+        r = Math.floor(r / (imageData.length / 4));
+        g = Math.floor(g / (imageData.length / 4));
+        b = Math.floor(b / (imageData.length / 4));
+
+        // Convert RGB to HSL
+        const rgbToHsl = (r, g, b) => {
+          r /= 255; g /= 255; b /= 255;
+          const max = Math.max(r, g, b), min = Math.min(r, g, b);
+          let h, s, l = (max + min) / 2;
+          if (max === min) h = s = 0;
+          else {
+            const d = max - min;
+            s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+            switch (max) {
+              case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+              case g: h = (b - r) / d + 2; break;
+              case b: h = (r - g) / d + 4; break;
+            }
+            h /= 6;
+          }
+          return [h * 360, s * 100, l * 100];
+        };
+
+        const [h, s, l] = rgbToHsl(r, g, b);
+        
+        // Compress and resize for background skin
+        const bgCanvas = document.createElement('canvas');
+        const bgCtx = bgCanvas.getContext('2d');
+        const maxDim = 1280;
+        let scale = Math.min(maxDim / img.width, maxDim / img.height, 1);
+        bgCanvas.width = img.width * scale;
+        bgCanvas.height = img.height * scale;
+        bgCtx.drawImage(img, 0, 0, bgCanvas.width, bgCanvas.height);
+        const bgDataUrl = bgCanvas.toDataURL('image/jpeg', 0.8);
+
+        // Generate semantic tokens
+        const customPalette = {
+          '--ink-bg': `hsl(${h}, ${Math.min(s, 20)}%, 7%)`,
+          '--ink-bg-secondary': `hsl(${h}, ${Math.min(s, 20)}%, 4%)`,
+          '--ink-surface-0': `hsl(${h}, ${Math.min(s, 15)}%, 10%)`,
+          '--ink-surface': `hsl(${h}, ${Math.min(s, 15)}%, 14%)`,
+          '--ink-surface-2': `hsl(${h}, ${Math.min(s, 15)}%, 18%)`,
+          '--ink-surface-hover': `hsl(${h}, ${Math.min(s, 15)}%, 22%)`,
+          '--ink-text-primary': `hsl(${h}, ${Math.min(s, 10)}%, 98%)`,
+          '--ink-text-secondary': `hsl(${h}, ${Math.min(s, 10)}%, 80%)`,
+          '--ink-accent-h': Math.round(h),
+          '--ink-accent-s': `${Math.round(Math.max(s, 60))}%`,
+          '--ink-accent-l': `${Math.round(Math.max(l, 50))}%`,
+          '--ink-primary': `hsl(${h}, ${Math.max(s, 60)}%, ${Math.max(l, 50)}%)`,
+        };
+
+        updateSettings({ 
+          customTheme: customPalette,
+          themeBackgroundImage: bgDataUrl, // Save as skin
+          accentColor: { name: 'Customly Extracted', h: Math.round(h), s: Math.round(Math.max(s, 60)), l: Math.round(Math.max(l, 50)) }
+        });
+        setTheme('theme-custom');
+        addToast('Theme extracted from image!', 'success');
+      };
+      img.src = event.target.result;
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleRemoveFolder = (cat) => {
     if (settings.confirmRemoveFolder !== false) {
@@ -81,7 +168,6 @@ const SettingsView = () => {
       prevPage: 'ArrowLeft',
       zoomIn: '+',
       zoomOut: '-',
-      toggleToc: 't',
       toggleNightMode: 'n',
       goToPage: 'g',
       backToLibrary: 'Escape',
@@ -129,7 +215,6 @@ const SettingsView = () => {
     prevPage: 'Previous Page',
     zoomIn: 'Zoom In',
     zoomOut: 'Zoom Out',
-    toggleToc: 'Toggle Table of Contents',
     toggleNightMode: 'Toggle Night Mode',
     goToPage: 'Go to Page',
     backToLibrary: 'Back to Library',
@@ -192,12 +277,49 @@ const SettingsView = () => {
                 </div>
                 <hr className="divider" />
 
-                <SettingRow label="Theme" description="Toggle between light and dark interface.">
-                  <div className="theme-toggle-group">
-                    <button className={`theme-btn ${theme === 'dark' ? 'active' : ''}`} onClick={() => setTheme('dark')}>Dark</button>
-                    <button className={`theme-btn ${theme === 'light' ? 'active' : ''}`} onClick={() => setTheme('light')}>Light</button>
+                <SettingRow label="Theme" description="Choose a visual preset for the interface.">
+                  <div className="theme-grid">
+                    {[
+                      { id: 'light', label: 'Light', color: '#f5f6f8' },
+                      { id: 'dark', label: 'Dark', color: '#1a1a1a' },
+                      { id: 'midnight', label: 'Midnight', color: '#000000' },
+                      { id: 'sepia', label: 'Sepia', color: '#f4ecd8' },
+                      { id: 'nord', label: 'Nord', color: '#2e3440' },
+                      { id: 'sunset', label: 'Sunset', color: '#1a1a2e' },
+                      { id: 'custom', label: 'Custom', icon: <Upload size={12} /> }
+                    ].map(t => (
+                      <button 
+                        key={t.id} 
+                        className={`theme-preset-btn ${theme === t.id || theme === `theme-${t.id}` ? 'active' : ''}`} 
+                        onClick={() => {
+                          if (t.id === 'custom') {
+                            fileInputRef.current?.click();
+                          } else {
+                            setTheme(t.id);
+                          }
+                        }}
+                      >
+                        <div className="theme-preset-preview" style={{ background: t.color || (settings.customTheme?.['--ink-primary']) || 'var(--ink-surface-strong)' }}>
+                          {t.icon}
+                        </div>
+                        <span>{t.label}</span>
+                      </button>
+                    ))}
                   </div>
+                  <input 
+                    type="file" 
+                    ref={fileInputRef} 
+                    style={{ display: 'none' }} 
+                    accept="image/*" 
+                    onChange={handleCustomThemeUpload}
+                  />
                 </SettingRow>
+
+                {settings.themeBackgroundImage && (
+                  <SettingRow label="Show Background Image" description="Apply the custom theme's source image as an application background.">
+                    <Toggle checked={settings.showThemeBackgroundImage === true} onChange={v => updateSettings({ showThemeBackgroundImage: v })} />
+                  </SettingRow>
+                )}
 
                 <SettingRow label="Accent Color" description="Choose your preferred accent color.">
                   <div className="accent-grid">
@@ -467,13 +589,13 @@ const SettingsView = () => {
                       ))
                     )}
                   </div>
-                  <button className="btn-surface" onClick={addCategory} style={{ marginTop: 'var(--space-4)', width: '100%', justifyContent: 'center' }}>
+                  <button className="btn-surface" onClick={addCategory} style={{ marginTop: 'var(--space-3)', width: '100%', justifyContent: 'center' }}>
                     <Plus size={16} />
                     Map New Folder
                   </button>
                 </div>
 
-                <hr className="divider" style={{ margin: 'var(--space-6) 0' }} />
+                <hr className="divider" style={{ margin: 'var(--space-4) 0' }} />
 
                 <SettingRow label="Show Book Covers" description="Render first page of PDF as cover (can affect performance).">
                   <Toggle checked={settings.showBookCovers !== false} onChange={v => updateSettings({ showBookCovers: v })} />
@@ -493,6 +615,10 @@ const SettingsView = () => {
 
                 <SettingRow label="Show Reading Stats" description="Display reading statistics in the library dashboard.">
                   <Toggle checked={settings.showLibraryStats !== false} onChange={v => updateSettings({ showLibraryStats: v })} />
+                </SettingRow>
+
+                <SettingRow label="Show Library Dashboard" description="Master toggle for all stats, favorites, and recent sections.">
+                  <Toggle checked={settings.showDashboard !== false} onChange={v => updateSettings({ showDashboard: v })} />
                 </SettingRow>
 
                 <SettingRow label="Show File Extensions" description="Display .pdf extension in book titles.">
@@ -554,7 +680,7 @@ const SettingsView = () => {
                   </SettingRow>
                 ))}
 
-                <div style={{ marginTop: 'var(--space-6)' }}>
+                <div style={{ marginTop: 'var(--space-4)' }}>
                   <button className="btn-ghost" onClick={resetShortcuts}>
                     <RotateCcw size={14} />
                     Reset to Defaults
@@ -615,6 +741,22 @@ const SettingsView = () => {
                       style={{ color: 'var(--ink-danger)' }}
                     >
                       Clear Cache
+                    </button>
+                  </div>
+                  <div className="danger-zone-item">
+                    <div className="danger-zone-info">
+                      <h4 className="danger-zone-label">Force Library Sync</h4>
+                      <p className="danger-zone-desc">Manually rescan all mapped folders for new or removed books.</p>
+                    </div>
+                    <button 
+                      className="btn-surface" 
+                      onClick={() => {
+                        refreshLibrary();
+                        addToast('Syncing library...', 'info');
+                      }}
+                    >
+                      <RefreshCw size={14} />
+                      Sync Now
                     </button>
                   </div>
                 </div>

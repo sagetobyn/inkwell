@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { useToast } from '../components/Toast';
 import Tooltip from '../components/Tooltip';
 import {
   ArrowLeft, ZoomIn, ZoomOut, Maximize, Minimize,
-  Moon, Sun, BookmarkPlus, Bookmark, List, ChevronLeft,
-  ChevronRight, Columns, Minus, Type
+  Moon, Sun, ChevronLeft,
+  ChevronRight, Columns, Minus, Type, Highlighter, Check
 } from 'lucide-react';
 import InfiniteScrollReader from '../components/InfiniteScrollReader';
 import PdfRenderer from '../components/PdfRenderer';
@@ -15,8 +15,7 @@ const ReaderView = () => {
   const {
     closeBook, currentBook, shortcuts, bookProgress, updateBookProgress,
     pdfNightMode, togglePdfNightMode, settings, updateSettings,
-    addBookmark, removeBookmark, isBookmarked, getBookmarks, setBookTotalPages,
-    totalPagesMap
+    setBookTotalPages, totalPagesMap
   } = useAppContext();
 
   const addToast = useToast();
@@ -33,11 +32,10 @@ const ReaderView = () => {
 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [dictQuery, setDictQuery] = useState(null);
-  const [showToc, setShowToc] = useState(false);
-  const [tocItems] = useState([]);
   const [showControls, setShowControls] = useState(true);
   const [showGoToPage, setShowGoToPage] = useState(false);
   const [goToPageInput, setGoToPageInput] = useState('');
+  const [saveStatus, setSaveStatus] = useState('idle'); // 'idle' | 'saving' | 'success' | 'error'
 
   const readerRef = useRef(null);   // ref to InfiniteScrollReader (exposes scrollToPage)
   const controlsTimeout = useRef(null);
@@ -61,7 +59,7 @@ const ReaderView = () => {
       if (progressUpdateTimer.current) clearTimeout(progressUpdateTimer.current);
       progressUpdateTimer.current = setTimeout(() => {
         updateBookProgress(currentBook.path, page);
-      }, 1000); 
+      }, 1000);
     }
     // Reset scroll in single-page mode
     if (!infiniteScroll && contentRef.current) {
@@ -72,6 +70,16 @@ const ReaderView = () => {
       if (progressUpdateTimer.current) clearTimeout(progressUpdateTimer.current);
     };
   }, [page, currentBook?.path, infiniteScroll]);
+
+  // Sync internal page state if currentBook changes (e.g. opened from recent/hero)
+  useEffect(() => {
+    if (currentBook?.path) {
+      const savedPage = bookProgress[currentBook.path]?.page || 1;
+      setPage(savedPage);
+      // Reset initialScrollDone so it jumps to the correct page for the new book
+      initialScrollDone.current = false;
+    }
+  }, [currentBook?.path]);
 
   // ── Scroll to initial saved page when PDF loads ─────────────────────────
   const [pdfReady, setPdfReady] = useState(false);
@@ -162,30 +170,110 @@ const ReaderView = () => {
       if (dictQuery) setDictQuery(null);
 
       if (e.key === shortcuts.fullscreen) { e.preventDefault(); toggleFullscreen(); }
-      if (e.key === shortcuts.toggleToc) { e.preventDefault(); setShowToc(t => !t); }
       if (e.key === shortcuts.toggleNightMode) { e.preventDefault(); togglePdfNightMode(); }
       if (e.key === shortcuts.goToPage) { e.preventDefault(); setShowGoToPage(true); }
       if (e.key === shortcuts.backToLibrary) { e.preventDefault(); updateBookProgress(currentBook?.path, page); closeBook(); }
       if (e.key === shortcuts.zoomIn || (e.ctrlKey && e.key === '=')) { e.preventDefault(); handleZoomIn(); }
       if (e.key === shortcuts.zoomOut || (e.ctrlKey && e.key === '-')) { e.preventDefault(); handleZoomOut(); }
-
-      // Ctrl+D to bookmark
-      if (e.ctrlKey && e.key === 'd') {
-        e.preventDefault();
-        if (bookPath) {
-          if (isBookmarked(bookPath, page)) {
-            removeBookmark(bookPath, page);
-            addToast('Bookmark removed', 'info');
-          } else {
-            addBookmark(bookPath, page);
-            addToast(`Page ${page} bookmarked`, 'success');
-          }
-        }
-      }
+      if (e.key === shortcuts.saveHighlight) { e.preventDefault(); handleSaveHighlight(); }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [shortcuts, dictQuery, page, totalPages, showGoToPage, bookPath]);
+
+  // ── Save Highlight to PDF Binary ─────────────────────────────────────────
+  const handleSaveHighlight = async () => {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed || !currentBook?.path) {
+      addToast('Select some text first to highlight', 'info');
+      return;
+    }
+
+    // 1. Find all spans within the selection that have PDF metadata
+    const selectedSpans = [];
+    document.querySelectorAll('.textLayer span[data-pdf-x]').forEach(span => {
+      if (selection.containsNode(span, true)) {
+        selectedSpans.push(span);
+      }
+    });
+
+    if (selectedSpans.length === 0) {
+      addToast('No text selected in the document', 'info');
+      return;
+    }
+
+    try {
+      setSaveStatus('saving');
+      
+      const { readFile, writeFile } = await import('@tauri-apps/plugin-fs');
+      const { PDFDocument, rgb, PDFName, PDFArray } = await import('pdf-lib');
+
+      const existingPdfBytes = await readFile(currentBook.path);
+      const pdfDoc = await PDFDocument.load(existingPdfBytes);
+      const context = pdfDoc.context;
+
+      // Group spans by page
+      const spansByPage = selectedSpans.reduce((acc, span) => {
+        const p = parseInt(span.getAttribute('data-page'));
+        if (!acc[p]) acc[p] = [];
+        acc[p].push(span);
+        return acc;
+      }, {});
+
+      for (const [pageNum, spans] of Object.entries(spansByPage)) {
+        const pageIndex = parseInt(pageNum) - 1;
+        if (pageIndex < 0 || pageIndex >= pdfDoc.getPageCount()) continue;
+        
+        const pdfPage = pdfDoc.getPage(pageIndex);
+
+        spans.forEach(span => {
+          const x = parseFloat(span.getAttribute('data-pdf-x'));
+          const y = parseFloat(span.getAttribute('data-pdf-y'));
+          const w = parseFloat(span.getAttribute('data-pdf-w'));
+          const h = parseFloat(span.getAttribute('data-pdf-h'));
+
+          const rect = [x, y, x + w, y + h];
+
+          const highlightAnnot = context.obj({
+            Type: 'Annot',
+            Subtype: 'Highlight',
+            Rect: rect,
+            QuadPoints: [x, y+h, x+w, y+h, x, y, x+w, y],
+            C: [1, 0.9, 0.2],
+            CA: 0.4,
+          });
+
+          const annotRef = context.register(highlightAnnot);
+          
+          // --- FIXED LOOKUP TO AVOID "Expected PDFArray" ERROR ---
+          let annots = pdfPage.node.lookup(PDFName.of('Annots'));
+          if (!annots || !(annots instanceof PDFArray)) {
+            // Create new array if missing or not an array
+            annots = context.obj([]);
+            pdfPage.node.set(PDFName.of('Annots'), annots);
+          }
+          annots.push(annotRef);
+
+          span.classList.add('pdf-highlighted');
+        });
+      }
+
+      const pdfBytes = await pdfDoc.save();
+      await writeFile(currentBook.path, pdfBytes);
+      
+      setSaveStatus('success');
+      selection.removeAllRanges();
+      
+      // Auto-reset status
+      setTimeout(() => setSaveStatus('idle'), 1500);
+
+    } catch (err) {
+      console.error('Failed to save highlight:', err);
+      setSaveStatus('error');
+      addToast(`Error saving: ${err.message}`, 'danger');
+      setTimeout(() => setSaveStatus('idle'), 3000);
+    }
+  };
 
   // ── Ctrl+Wheel zoom; plain wheel → page turn in single-page mode ─────────
   useEffect(() => {
@@ -278,8 +366,7 @@ const ReaderView = () => {
     return filters.length > 0 ? filters.join(' ') : 'none';
   }, [pdfNightMode, settings.nightModeType, settings.sepiaWarmth, settings.brightness]);
 
-  const currentBookmarked = bookPath ? isBookmarked(bookPath, page) : false;
-  const bookmarksList = bookPath ? getBookmarks(bookPath) : [];
+  const bookmarksList = [];
 
   return (
     <div className={`reader-container ${isFullscreen ? 'fullscreen-active' : ''} ${showControls ? '' : 'controls-hidden'}`}>
@@ -291,54 +378,7 @@ const ReaderView = () => {
         </div>
       )}
 
-      {/* ─── TOC Panel ─── */}
-      <aside className={`toc-panel ${showToc ? 'open' : ''}`}>
-        <div className="toc-header">
-          <h3>Contents</h3>
-          <button className="icon-btn-sm" onClick={() => setShowToc(false)}>
-            <ChevronLeft size={16} />
-          </button>
-        </div>
-
-        {bookmarksList.length > 0 && (
-          <div className="toc-section">
-            <div className="toc-section-title">Bookmarks</div>
-            {bookmarksList.map(pg => (
-              <button
-                key={pg}
-                className={`toc-item ${pg === page ? 'active' : ''}`}
-                onClick={() => { setPage(pg); readerRef.current?.scrollToPage(pg); }}
-              >
-                <Bookmark size={13} />
-                <span>Page {pg}</span>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {tocItems.length > 0 && (
-          <div className="toc-section">
-            <div className="toc-section-title">Outline</div>
-            {tocItems.map((item, i) => (
-              <button
-                key={i}
-                className="toc-item"
-                style={{ paddingLeft: `${(item.level || 0) * 12 + 12}px` }}
-                onClick={() => item.page && (setPage(item.page), readerRef.current?.scrollToPage(item.page))}
-              >
-                <span>{item.title}</span>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {bookmarksList.length === 0 && tocItems.length === 0 && (
-          <div className="toc-empty">
-            <p>No outline or bookmarks yet.</p>
-            <p className="toc-hint">Press Ctrl+D to bookmark a page.</p>
-          </div>
-        )}
-      </aside>
+      {/* TOC Panel Removed */}
 
       {/* ─── PDF Content ─── */}
       <main className={`reader-content ${infiniteScroll ? 'reader-content-isr' : 'reader-content-single'}`} ref={infiniteScroll ? undefined : contentRef}>
@@ -385,15 +425,9 @@ const ReaderView = () => {
         {/* Top-left: Back + TOC */}
         <div className="ctrl-group ctrl-top-left">
           <div className="ctrl-pill">
-            <Tooltip content="Back to Library">
+            <Tooltip content="Back to Library" position="bottom">
               <button className="icon-btn-sm" onClick={() => { updateBookProgress(currentBook?.path, page); closeBook(); }}>
                 <ArrowLeft size={16} />
-              </button>
-            </Tooltip>
-            <div className="ctrl-divider" />
-            <Tooltip content="Table of Contents (T)">
-              <button className={`icon-btn-sm ${showToc ? 'active' : ''}`} onClick={() => setShowToc(t => !t)}>
-                <List size={16} />
               </button>
             </Tooltip>
           </div>
@@ -402,32 +436,25 @@ const ReaderView = () => {
         {/* Top-right: Night mode + Fullscreen + Bookmark */}
         <div className="ctrl-group ctrl-top-right">
           <div className="ctrl-pill">
-            <Tooltip content={infiniteScroll ? 'Single Page Mode' : 'Infinite Scroll Mode'}>
-              <button 
-                className={`icon-btn-sm ${infiniteScroll ? 'active' : ''}`} 
+            <Tooltip content={infiniteScroll ? 'Single Page Mode' : 'Infinite Scroll Mode'} position="bottom">
+              <button
+                className={`icon-btn-sm ${infiniteScroll ? 'active' : ''}`}
                 onClick={() => updateSettings({ infiniteScroll: !infiniteScroll })}
               >
                 <Columns size={16} />
               </button>
             </Tooltip>
-            <Tooltip content={pdfNightMode ? 'Day Mode (N)' : 'Night Mode (N)'}>
+            <Tooltip content={pdfNightMode ? 'Day Mode (N)' : 'Night Mode (N)'} position="bottom">
               <button className="icon-btn-sm" onClick={togglePdfNightMode}>
                 {pdfNightMode ? <Sun size={16} /> : <Moon size={16} />}
               </button>
             </Tooltip>
-            <Tooltip content={currentBookmarked ? 'Remove Bookmark (Ctrl+D)' : 'Bookmark Page (Ctrl+D)'}>
-              <button className={`icon-btn-sm ${currentBookmarked ? 'active' : ''}`} onClick={() => {
-                if (bookPath) {
-                  if (currentBookmarked) {
-                    removeBookmark(bookPath, page);
-                    addToast('Bookmark removed', 'info');
-                  } else {
-                    addBookmark(bookPath, page);
-                    addToast(`Page ${page} bookmarked`, 'success');
-                  }
-                }
-              }}>
-                {currentBookmarked ? <Bookmark size={16} fill="currentColor" /> : <BookmarkPlus size={16} />}
+            <Tooltip content="Highlight Selection (H)" position="bottom">
+              <button 
+                className={`icon-btn-sm highlight-btn ${saveStatus === 'success' ? 'status-success' : ''} ${saveStatus === 'saving' ? 'status-saving' : ''}`} 
+                onClick={handleSaveHighlight}
+              >
+                {saveStatus === 'success' ? <Check size={16} className="animate-pop" /> : <Highlighter size={16} />}
               </button>
             </Tooltip>
             <div className="ctrl-divider" />
@@ -446,7 +473,7 @@ const ReaderView = () => {
 
             <div className="ctrl-divider" />
 
-            <Tooltip content="Toggle Fullscreen">
+            <Tooltip content="Toggle Fullscreen" position="bottom">
               <button className="icon-btn-sm" onClick={toggleFullscreen}>
                 {isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
               </button>
@@ -507,23 +534,6 @@ const ReaderView = () => {
         </div>
       </div>
 
-      {/* ─── Page Slider ─── */}
-      {totalPages > 0 && showControls && (
-        <div className="page-slider-container">
-          <input
-            type="range"
-            className="page-slider"
-            min={1}
-            max={totalPages}
-            value={page}
-            onChange={e => {
-              const p = parseInt(e.target.value, 10);
-              setPage(p);
-              readerRef.current?.scrollToPage(p);
-            }}
-          />
-        </div>
-      )}
 
       {/* ─── Go To Page Popover ─── */}
       {showGoToPage && (

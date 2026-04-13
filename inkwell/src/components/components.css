@@ -57,26 +57,28 @@
 .btn-primary {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
-  background: var(--ink-primary);
+  gap: var(--space-1-5);
+  background: linear-gradient(180deg, var(--ink-primary) 0%, var(--ink-primary-hover) 100%);
   color: var(--ink-text-on-accent);
-  padding: 0.4rem 1.25rem;
-  border-radius: var(--radius-sm);
-  font-size: var(--font-sm);
+  padding: 0.35rem 0.9rem;
+  border-radius: var(--radius-full);
+  font-size: var(--font-xs);
   font-weight: 600;
-  transition: all var(--transition-fast);
-  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all var(--transition-fast) var(--ease-out);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  cursor: pointer;
 }
 
 .btn-primary:hover {
-  background: var(--ink-primary-hover);
-  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  filter: brightness(1.1);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
   transform: translateY(-1px);
 }
 
 .btn-primary:active {
   transform: translateY(0) scale(0.97);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 /* ── Ghost Button ── */
@@ -187,7 +189,7 @@
   border: 1px solid var(--ink-border);
 }
 
-.toggle-switch input:checked + .toggle-track {
+.toggle-switch input:checked+.toggle-track {
   background: var(--ink-primary);
   border-color: var(--ink-primary);
 }
@@ -204,7 +206,7 @@
   box-shadow: var(--shadow-1);
 }
 
-.toggle-switch input:checked + .toggle-track .toggle-thumb {
+.toggle-switch input:checked+.toggle-track .toggle-thumb {
   transform: translateX(18px);
 }
 
@@ -299,10 +301,21 @@
   height: 20px;
 }
 
-.toast-success .toast-icon { color: var(--ink-success); }
-.toast-warning .toast-icon { color: var(--ink-warning); }
-.toast-error .toast-icon { color: var(--ink-danger); }
-.toast-info .toast-icon { color: var(--ink-info); }
+.toast-success .toast-icon {
+  color: var(--ink-success);
+}
+
+.toast-warning .toast-icon {
+  color: var(--ink-warning);
+}
+
+.toast-error .toast-icon {
+  color: var(--ink-danger);
+}
+
+.toast-info .toast-icon {
+  color: var(--ink-info);
+}
 
 /* ========================================================================
    Tooltip
@@ -314,31 +327,50 @@
 
 .tooltip {
   position: absolute;
-  bottom: calc(100% + 6px);
   left: 50%;
   transform: translateX(-50%);
-  padding: 0.25rem 0.5rem;
+  padding: 0.25rem 0.6rem;
   background: var(--ink-surface-3);
   color: var(--ink-text-primary);
   border: 1px solid var(--ink-border-strong);
   border-radius: var(--radius-sm);
   font-size: var(--font-2xs);
-  font-weight: 500;
+  font-weight: 600;
   white-space: nowrap;
   pointer-events: none;
   z-index: var(--z-tooltip);
-  animation: fadeIn 0.1s var(--ease-out) forwards;
-  box-shadow: var(--shadow-3);
+  animation: fadeIn 0.15s var(--ease-out) forwards;
+  box-shadow: var(--shadow-4);
 }
 
-.tooltip::after {
+/* Tooltip on Top */
+.tooltip.top {
+  bottom: calc(100% + 8px);
+}
+
+.tooltip.top::after {
   content: '';
   position: absolute;
   top: 100%;
   left: 50%;
   transform: translateX(-50%);
-  border: 4px solid transparent;
+  border: 5px solid transparent;
   border-top-color: var(--ink-surface-3);
+}
+
+/* Tooltip on Bottom */
+.tooltip.bottom {
+  top: calc(100% + 8px);
+}
+
+.tooltip.bottom::after {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-bottom-color: var(--ink-surface-3);
 }
 
 /* ========================================================================

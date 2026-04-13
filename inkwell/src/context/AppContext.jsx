@@ -28,11 +28,11 @@ export const AppProvider = ({ children }) => {
     prevPage: 'ArrowLeft',
     zoomIn: '+',
     zoomOut: '-',
-    toggleToc: 't',
     toggleNightMode: 'n',
     goToPage: 'g',
     backToLibrary: 'Escape',
     commandPalette: 'k',
+    saveHighlight: 'h',
   };
 
   const defaultSettings = {
@@ -69,6 +69,9 @@ export const AppProvider = ({ children }) => {
     readerZenMode: 'off',        // off | on_scroll | always
     transitionSpeed: 'normal',   // fast | normal | slow
     startupPage: 'library',      // library | recent | resume
+    showThemeBackgroundImage: false,
+    themeBackgroundImage: null,  // DataURL
+    showDashboard: true,         // Migrated from local state
   };
 
   /* ───────── State ───────── */
@@ -94,8 +97,6 @@ export const AppProvider = ({ children }) => {
   const [settings, setSettings] = useState(defaultSettings);
   const [recentBooks, setRecentBooks] = useState([]);
   const [favoriteBookIds, setFavoriteBookIds] = useState([]);
-  const [bookmarks, setBookmarks] = useState({});      // { [bookPath]: [pageNum, ...] }
-  const [annotations, setAnnotations] = useState({});   // { [bookPath]: { [page]: [...] } }
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -105,6 +106,8 @@ export const AppProvider = ({ children }) => {
   const [thumbnailsMap, setThumbnailsMap] = useState({}); // { [bookPath]: fileName }
   const [thumbnailsBaseDir, setThumbnailsBaseDir] = useState(null);
   const [readingStats, setReadingStats] = useState({ totalBooksOpened: 0, lastReadDate: null, readDates: [] });
+  const [pinnedSubfolders, setPinnedSubfolders] = useState([]); // Array of { categoryId, folderName }
+  const [activeSubfolder, setActiveSubfolder] = useState(null); // Track name of subfolder being viewed
 
   // Debounced save ref
   const saveTimeout = useRef(null);
@@ -224,12 +227,30 @@ export const AppProvider = ({ children }) => {
 
   /* ───────── Apply Theme ───────── */
   useEffect(() => {
-    if (theme === 'light') {
-      document.body.classList.add('light-theme');
-    } else {
-      document.body.classList.remove('light-theme');
+    // List of all theme classes to remove
+    const themeClasses = ['theme-light', 'theme-dark', 'theme-sepia', 'theme-midnight', 'theme-nord', 'theme-sunset', 'theme-custom'];
+    document.body.classList.remove(...themeClasses);
+
+    // Convert old "light/dark" values to new "theme-xxx" if necessary, though ideally they are updated in state
+    const themeClass = theme.startsWith('theme-') ? theme : `theme-${theme}`;
+    document.body.classList.add(themeClass);
+
+    // If it's a custom theme, apply custom variables from settings
+    if (theme === 'theme-custom' && settings.customTheme) {
+      const root = document.documentElement;
+      Object.entries(settings.customTheme).forEach(([prop, val]) => {
+        root.style.setProperty(prop, val);
+      });
     }
-  }, [theme]);
+
+    // Apply Background Image Skin
+    if (settings.showThemeBackgroundImage && settings.themeBackgroundImage) {
+      document.body.classList.add('has-background-image');
+      document.documentElement.style.setProperty('--app-bg-image', `url(${settings.themeBackgroundImage})`);
+    } else {
+      document.body.classList.remove('has-background-image');
+    }
+  }, [theme, settings.customTheme, settings.showThemeBackgroundImage, settings.themeBackgroundImage]);
 
   /* ───────── Apply Styles (Theme, Accent, Glass, Font) ───────── */
   useEffect(() => {
@@ -268,7 +289,7 @@ export const AppProvider = ({ children }) => {
     const setupListeners = async () => {
       try {
         const store = await load('library.json', { autoSave: false });
-        
+
         // Settings Sync
         unlistenSettings = await store.onKeyChange('settings', (val) => {
           if (val) setSettings(prev => ({ ...prev, ...val }));
@@ -323,35 +344,63 @@ export const AppProvider = ({ children }) => {
 
   /* ───────── Load from Store (Parallelized) ───────── */
   useEffect(() => {
-    const initStore = async () => {
-      const startTime = performance.now();
-      console.log("[Init] Starting store initialization...");
-      
+    let isMounted = true;
+    const startTime = performance.now();
+
+    const revealWindow = async (source) => {
       try {
+        const win = getCurrentWindow();
+        await win.show();
+
+        // Small delay to ensure React has rendered before removing splash
+        setTimeout(() => {
+          const splash = document.getElementById('splash');
+          if (splash) splash.classList.add('splash-hidden');
+        }, 150);
+
+        console.log(`[Init] Window revealed via ${source} at ${Math.round(performance.now() - startTime)}ms`);
+      } catch (e) {
+        console.error(`[Init] Failed to reveal window (${source})`, e);
+      }
+    };
+
+    // Safety fallback: if store loading is extremely slow, show the window anyway after 5s
+    const safetyTimeout = setTimeout(() => {
+      if (isMounted) {
+        console.warn("[Init] Safety fallback triggered. Data loading may be hanging.");
+        revealWindow('timeout-fallback');
+      }
+    }, 5000);
+
+    const initStore = async () => {
+      console.log("[Init] Starting store initialization...");
+
+      try {
+        console.log("[Init] Loading library.json...");
         const store = await load('library.json', { autoSave: false });
-        
-        // Define all keys we need to fetch
+        console.log("[Init] Store plugin ready.");
+
         const keys = [
           'categories', 'importedBooks', 'allBooks', 'bookProgress',
           'shortcuts', 'pdfNightMode', 'theme', 'settings',
-          'recentBooks', 'favoriteBookIds', 'bookmarks', 'annotations',
-          'viewMode', 'sortOrder', 'readingStats', 'totalPagesMap', 'thumbnailsMap'
+          'recentBooks', 'favoriteBookIds',
+          'viewMode', 'sortOrder', 'readingStats', 'totalPagesMap', 'thumbnailsMap',
+          'pinnedSubfolders'
         ];
 
-        // Fetch all in parallel
+        console.log(`[Init] Fetching ${keys.length} keys...`);
         const results = await Promise.all(keys.map(key => store.get(key)));
-        
-        // Map results back to variables
+
         const [
           s_categories, s_imported, s_allBooks, s_progress,
           s_shortcuts, s_pdfMode, s_theme, s_settings,
-          s_recent, s_favorites, s_bookmarks, s_annotations,
-          s_viewMode, s_sortOrder, s_readingStats, s_totalPages, s_thumbnails
+          s_recent, s_favorites,
+          s_viewMode, s_sortOrder, s_readingStats, s_totalPages, s_thumbnails,
+          s_pinned
         ] = results;
 
-        console.log(`[Init] Data fetched in ${Math.round(performance.now() - startTime)}ms`);
+        console.log(`[Init] Raw data received in ${Math.round(performance.now() - startTime)}ms`);
 
-        // Batch state updates (React 18+ handles this well)
         if (Array.isArray(s_categories)) {
           setCategories([{ id: 'all', name: 'All Books', path: null }, ...s_categories]);
         }
@@ -364,41 +413,31 @@ export const AppProvider = ({ children }) => {
         if (s_settings) setSettings(prev => ({ ...prev, ...s_settings }));
         if (Array.isArray(s_recent)) setRecentBooks(s_recent);
         if (Array.isArray(s_favorites)) setFavoriteBookIds(s_favorites);
-        if (s_bookmarks) setBookmarks(s_bookmarks);
-        if (s_annotations) setAnnotations(s_annotations);
         if (s_viewMode) setViewMode(s_viewMode);
         if (s_sortOrder) setSortOrder(s_sortOrder);
         if (s_readingStats) setReadingStats(prev => ({ ...prev, ...s_readingStats }));
         if (s_totalPages) setTotalPagesMap(s_totalPages);
         if (s_thumbnails) setThumbnailsMap(s_thumbnails);
+        if (Array.isArray(s_pinned)) setPinnedSubfolders(s_pinned);
 
         const dataDir = await appLocalDataDir();
         const thumbDir = await join(dataDir, 'thumbnails');
         setThumbnailsBaseDir(thumbDir);
 
-        console.log(`[Init] All state ready in ${Math.round(performance.now() - startTime)}ms.`);
+        console.log(`[Init] State hydration complete in ${Math.round(performance.now() - startTime)}ms.`);
 
       } catch (err) {
-        console.error("[Init] Failed to load library store", err);
+        console.error("[Init] Critical failure during hydration:", err);
       } finally {
-        // Show window and hide splash
-        try {
-          const win = getCurrentWindow();
-          await win.show();
-          
-          // Small delay to ensure React has rendered before removing splash
-          setTimeout(() => {
-            const splash = document.getElementById('splash');
-            if (splash) splash.classList.add('splash-hidden');
-          }, 100);
-          
-          console.log(`[Init] App ready and visible at ${Math.round(performance.now() - startTime)}ms`);
-        } catch(e) {
-          console.error("[Init] Failed to show window or hide splash", e);
+        if (isMounted) {
+          clearTimeout(safetyTimeout);
+          await revealWindow('standard-init');
         }
       }
     };
+
     initStore();
+    return () => { isMounted = false; clearTimeout(safetyTimeout); };
   }, []);
 
   /* ───────── Directory Scanner (unchanged logic) ───────── */
@@ -451,7 +490,7 @@ export const AppProvider = ({ children }) => {
   useEffect(() => {
     const runScan = async () => {
       if (categories.length === 0) return;
-      
+
       setIsScanning(true);
       setScanError(null);
       let scanned = [];
@@ -486,7 +525,7 @@ export const AppProvider = ({ children }) => {
     const timer = setTimeout(() => {
       runScan();
     }, allBooks.length > 0 ? 10000 : 1000); // 10s if we already have books, 1s if first-time
-    
+
     return () => clearTimeout(timer);
   }, [categories.length, syncTrigger]); // ONLY trigger on cat count change or manual refresh
 
@@ -573,11 +612,18 @@ export const AppProvider = ({ children }) => {
 
   const openSettingsWindow = async () => {
     try {
-      const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
-      const win = WebviewWindow.getByLabel('settings');
+      if (!WebviewWindow) {
+        console.error("WebviewWindow API not available. Falling back.");
+        setCurrentView('settings');
+        return;
+      }
+
+      const win = await WebviewWindow.getByLabel('settings');
       if (win) {
+        console.log("[Window] Settings window already exists, focusing...");
         await win.setFocus();
       } else {
+        console.log("[Window] Creating new settings window...");
         new WebviewWindow('settings', {
           url: 'index.html?view=settings',
           title: 'Settings — InkWell',
@@ -588,10 +634,12 @@ export const AppProvider = ({ children }) => {
           maximizable: true,
           decorations: true,
           center: true,
+          dragDropEnabled: false,
         });
       }
     } catch (e) {
-      console.error("Failed to open settings window", e);
+      console.error("Critical error launching settings window:", e);
+      // Only fallback to the main window if it's a genuine platform failure
       setCurrentView('settings');
     }
   };
@@ -656,25 +704,6 @@ export const AppProvider = ({ children }) => {
 
   const isFavorite = (bookPath) => favoriteBookIds.includes(bookPath);
 
-  const addBookmark = async (bookPath, pageNum) => {
-    const bookBm = bookmarks[bookPath] || [];
-    if (bookBm.includes(pageNum)) return;
-    const updated = { ...bookmarks, [bookPath]: [...bookBm, pageNum].sort((a, b) => a - b) };
-    setBookmarks(updated);
-    await immediateStoreSave('bookmarks', updated);
-  };
-
-  const removeBookmark = async (bookPath, pageNum) => {
-    const bookBm = bookmarks[bookPath] || [];
-    const updated = { ...bookmarks, [bookPath]: bookBm.filter(p => p !== pageNum) };
-    setBookmarks(updated);
-    await immediateStoreSave('bookmarks', updated);
-  };
-
-  const isBookmarked = (bookPath, pageNum) => (bookmarks[bookPath] || []).includes(pageNum);
-
-  const getBookmarks = (bookPath) => bookmarks[bookPath] || [];
-
   const setBookTotalPages = async (bookPath, numPages) => {
     const updated = { ...totalPagesMap, [bookPath]: numPages };
     setTotalPagesMap(updated);
@@ -696,7 +725,23 @@ export const AppProvider = ({ children }) => {
     setImportedBooks(updated);
     await immediateStoreSave('importedBooks', updated);
   };
-  
+
+  const togglePinSubfolder = async (categoryId, folderName) => {
+    const isPinned = pinnedSubfolders.some(p => p.categoryId === categoryId && p.folderName === folderName);
+    let updated;
+    if (isPinned) {
+      updated = pinnedSubfolders.filter(p => !(p.categoryId === categoryId && p.folderName === folderName));
+    } else {
+      updated = [...pinnedSubfolders, { categoryId, folderName }];
+    }
+    setPinnedSubfolders(updated);
+    await immediateStoreSave('pinnedSubfolders', updated);
+  };
+
+  const isSubfolderPinned = (categoryId, folderName) => {
+    return pinnedSubfolders.some(p => p.categoryId === categoryId && p.folderName === folderName);
+  };
+
   const clearThumbnailCache = async () => {
     try {
       const { removeDir, mkdir } = await import('@tauri-apps/plugin-fs');
@@ -734,15 +779,26 @@ export const AppProvider = ({ children }) => {
 
   /* ───────── Filter books by category ───────── */
   const booksByCategory = React.useMemo(() => {
+    let filtered;
     if (activeCategoryId === 'all') {
-      return [...allBooks, ...importedBooks];
+      filtered = [...allBooks, ...importedBooks];
+    } else {
+      const cat = categories.find(c => c.id === activeCategoryId);
+      if (!cat || !cat.path) {
+        filtered = importedBooks;
+      } else {
+        // Filter allBooks for those that are in this category's path
+        filtered = allBooks.filter(b => b.path.startsWith(cat.path));
+      }
     }
-    const cat = categories.find(c => c.id === activeCategoryId);
-    if (!cat || !cat.path) return importedBooks;
 
-    // Filter allBooks for those that are in this category's path
-    return allBooks.filter(b => b.path.startsWith(cat.path));
-  }, [allBooks, importedBooks, activeCategoryId, categories]);
+    // Secondary filter: Active subfolder
+    if (activeSubfolder) {
+      filtered = filtered.filter(b => b.folder === activeSubfolder);
+    }
+
+    return filtered;
+  }, [allBooks, importedBooks, activeCategoryId, categories, activeSubfolder]);
 
   /* ───────── Sort books ───────── */
   const sortedBooks = React.useMemo(() => {
@@ -870,8 +926,6 @@ export const AppProvider = ({ children }) => {
     // New features
     recentBooks, addToRecent,
     favoriteBookIds, toggleFavorite, isFavorite,
-    bookmarks, addBookmark, removeBookmark, isBookmarked, getBookmarks,
-    annotations, setAnnotations,
     sidebarCollapsed, setSidebarCollapsed,
     commandPaletteOpen, setCommandPaletteOpen,
     searchQuery, setSearchQuery,
@@ -880,6 +934,8 @@ export const AppProvider = ({ children }) => {
     totalPagesMap, setBookTotalPages,
     thumbnailsMap,
     removeImportedBook,
+    pinnedSubfolders, togglePinSubfolder, isSubfolderPinned,
+    activeSubfolder, setActiveSubfolder,
     getThumbnailUrl,
     thumbnailsBaseDir,
     continueReadingBook,
@@ -901,3 +957,4 @@ export const useAppContext = () => {
   }
   return context;
 };
+

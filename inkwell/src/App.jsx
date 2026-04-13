@@ -12,6 +12,38 @@ import {
 import './components/components.css';
 import './App.css';
 
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, errorInfo) {
+    console.error("View Crash:", error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: '2rem', color: 'white', background: '#1a1a1a', height: '100vh' }}>
+          <h2>View Crashed</h2>
+          <pre style={{ color: '#ef4444', marginTop: '1rem', whiteSpace: 'pre-wrap' }}>
+            {this.state.error?.toString()}
+          </pre>
+          <button 
+            onClick={() => window.location.reload()}
+            style={{ marginTop: '2rem', padding: '0.5rem 1rem', background: '#3b82f6', border: 'none', borderRadius: '4px', color: 'white', cursor: 'pointer' }}
+          >
+            Reload App
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 const AppContent = () => {
   const {
     currentView, setCurrentView,
@@ -97,6 +129,9 @@ const AppContent = () => {
 
   return (
     <div className={`app-container ${isSettingsWindow ? 'settings-window-active' : ''}`}>
+      {/* Global Background for Skinning */}
+      <div className="app-bg-container" />
+      
       <main className="view-container">
         <div className="view-transition" key={currentView}>
           {currentView === 'library' && <LibraryView />}
@@ -120,7 +155,9 @@ function App() {
   return (
     <AppProvider>
       <ToastProvider>
-        <AppContent />
+        <ErrorBoundary>
+          <AppContent />
+        </ErrorBoundary>
       </ToastProvider>
     </AppProvider>
   );

@@ -18,6 +18,7 @@ const PDF_OPTIONS = {
 
 // ─── Single Page Renderer ───────────────────────────────────────────────────
 // Renders one page onto a canvas with a text layer overlay.
+// Optimized with CSS scaling for intermediate zoom levels.
 const PageCanvas = React.memo(({ pdf, pageNum, scale, showGlow }) => {
   const canvasRef = useRef(null);
   const wrapperRef = useRef(null);
@@ -25,17 +26,21 @@ const PageCanvas = React.memo(({ pdf, pageNum, scale, showGlow }) => {
   const [dim, setDim] = useState({ width: 612, height: 792 });
   const [rendered, setRendered] = useState(false);
 
+  // renderedScale tracks the scale the canvas was actually drawn at.
+  // We use this to apply CSS scaling while zooming.
+  const [renderedScale, setRenderedScale] = useState(scale);
+  const zoomDebounceRef = useRef(null);
+
   useEffect(() => {
     let active = true;
 
-    const render = async () => {
+    const render = async (targetScale) => {
       if (!pdf || !canvasRef.current) return;
       try {
         const page = await pdf.getPage(pageNum);
         if (!active) return;
 
-        const stdViewport = page.getViewport({ scale: 1 });
-        const viewport = page.getViewport({ scale });
+        const viewport = page.getViewport({ scale: targetScale });
         const dpr = window.devicePixelRatio || 1;
         const w = Math.floor(viewport.width);
         const h = Math.floor(viewport.height);
@@ -50,13 +55,15 @@ const PageCanvas = React.memo(({ pdf, pageNum, scale, showGlow }) => {
 
         if (renderTaskRef.current) {
           renderTaskRef.current.cancel();
-          await renderTaskRef.current.promise.catch(() => {});
+          await renderTaskRef.current.promise.catch(() => { });
         }
 
         renderTaskRef.current = page.render({ canvasContext: ctx, viewport });
         await renderTaskRef.current.promise;
+
         if (!active) return;
         setRendered(true);
+        setRenderedScale(targetScale);
 
         // ── Text Layer ──
         const textContent = await page.getTextContent();
@@ -70,34 +77,89 @@ const PageCanvas = React.memo(({ pdf, pageNum, scale, showGlow }) => {
           position: absolute; top: 0; left: 0;
           width: ${w}px; height: ${h}px;
           pointer-events: auto; overflow: hidden;
+          transform-origin: 0 0;
         `;
-        wrapper.appendChild(textDiv);
 
+        const fragment = document.createDocumentFragment();
         const measureCanvas = document.createElement('canvas');
         const measureCtx = measureCanvas.getContext('2d');
 
-        textContent.items.forEach(item => {
-          if (!item.str || item.str.trim() === '') return;
-          const span = document.createElement('span');
-          span.textContent = item.str + (item.hasEOL ? '\n' : '');
+        // --- PHASE 12: LOGICAL LINE GROUPING ---
+        const items = textContent.items.filter(item => item.str && item.str.trim() !== '');
+        const lines = [];
+        const Y_THRESHOLD = 5;
+
+        items.forEach(item => {
           const tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
+          const y = tx[5];
           const fontHeight = Math.sqrt(tx[2] ** 2 + tx[3] ** 2);
-          const fontAscent = fontHeight * 0.85;
-          const targetWidth = item.width * viewport.scale;
-          span.style.cssText = `
-            position: absolute;
-            left: ${tx[4]}px; top: ${tx[5] - fontAscent}px;
-            font-size: ${fontHeight}px; font-family: serif, sans-serif;
-            color: transparent; white-space: pre; line-height: 1;
-            transform-origin: 0 0; cursor: text;
-          `;
-          measureCtx.font = `${fontHeight}px serif`;
-          const measuredWidth = measureCtx.measureText(item.str).width;
-          if (measuredWidth > 0 && targetWidth > 0) {
-            span.style.transform = `scaleX(${targetWidth / measuredWidth})`;
+          
+          let line = lines.find(l => Math.abs(l.y - y) < Y_THRESHOLD);
+          if (!line) {
+            line = { y, items: [], fontHeight };
+            lines.push(line);
           }
-          textDiv.appendChild(span);
+          line.items.push({ ...item, tx, fontHeight });
+          line.fontHeight = Math.max(line.fontHeight, fontHeight);
         });
+
+        lines.sort((a, b) => a.y - b.y);
+
+        lines.forEach((line, index) => {
+          const lineDiv = document.createElement('div');
+          lineDiv.className = 'textLayer-line';
+          
+          const nextLine = lines[index + 1];
+          const lineTop = line.y - line.fontHeight * 0.8;
+          let lineHeightPx;
+
+          if (nextLine) {
+            const nextLineTop = nextLine.y - nextLine.fontHeight * 0.8;
+            lineHeightPx = Math.max(line.fontHeight * 1.2, nextLineTop - lineTop);
+          } else {
+            // Final line stretch to cover page bottom
+            const containerHeight = viewport.height;
+            lineHeightPx = Math.max(line.fontHeight * 1.5, containerHeight - lineTop);
+          }
+
+          lineDiv.style.cssText = `
+            position: absolute; left: 0; width: 100%;
+            top: ${lineTop}px;
+            height: ${lineHeightPx}px;
+            pointer-events: auto; user-select: text;
+          `;
+
+          line.items.sort((a, b) => a.tx[4] - b.tx[4]).forEach(item => {
+            const span = document.createElement('span');
+            span.textContent = item.str + (item.hasEOL ? '\n' : '');
+            
+            // --- ATTACH PDF COORDINATE METADATA ---
+            span.setAttribute('data-pdf-x', item.transform[4]);
+            span.setAttribute('data-pdf-y', item.transform[5]);
+            span.setAttribute('data-pdf-w', item.width);
+            span.setAttribute('data-pdf-h', item.transform[3]);
+            span.setAttribute('data-page', pageIndex + 1);
+
+            const itemTop = item.tx[5] - item.fontHeight * 0.8;
+            span.style.cssText = `
+              position: absolute;
+              left: ${item.tx[4]}px; top: ${itemTop - lineTop}px;
+              font-size: ${item.fontHeight}px; font-family: serif, sans-serif;
+              color: transparent; white-space: pre; line-height: 1;
+              transform-origin: 0 0; cursor: text;
+            `;
+
+            measureCtx.font = `${item.fontHeight}px serif`;
+            const targetWidth = item.width * viewport.scale;
+            const measuredWidth = measureCtx.measureText(item.str).width;
+            if (measuredWidth > 0 && targetWidth > 0) {
+              span.style.transform = `scaleX(${targetWidth / measuredWidth})`;
+            }
+            lineDiv.appendChild(span);
+          });
+          textDiv.appendChild(lineDiv);
+        });
+        wrapper.appendChild(textDiv);
       } catch (err) {
         if (err.name !== 'RenderingCancelledException') {
           console.error(`Page ${pageNum} render error:`, err);
@@ -105,12 +167,28 @@ const PageCanvas = React.memo(({ pdf, pageNum, scale, showGlow }) => {
       }
     };
 
-    render();
+    // If scale changed, debounce the re-render.
+    // Use the existing scale immediately for CSS scaling.
+    if (!rendered) {
+      render(scale);
+    } else {
+      if (zoomDebounceRef.current) clearTimeout(zoomDebounceRef.current);
+      zoomDebounceRef.current = setTimeout(() => {
+        if (active) render(scale);
+      }, 300); // 300ms debounce for high-quality re-render
+    }
+
     return () => {
       active = false;
+      if (zoomDebounceRef.current) clearTimeout(zoomDebounceRef.current);
       renderTaskRef.current?.cancel();
     };
   }, [pdf, pageNum, scale]);
+
+  // Intermediate zoom: scale the existing canvas
+  const displayScale = scale / renderedScale;
+  const displayWidth = rendered ? dim.width * displayScale : dim.width;
+  const displayHeight = rendered ? dim.height * displayScale : dim.height;
 
   return (
     <div
@@ -118,15 +196,15 @@ const PageCanvas = React.memo(({ pdf, pageNum, scale, showGlow }) => {
       className="isr-page-wrapper"
       style={{
         position: 'relative',
-        width: `${dim.width}px`,
-        height: `${dim.height}px`,
+        width: `${displayWidth}px`,
+        height: `${displayHeight}px`,
         borderRadius: 'var(--radius-sm)',
         boxShadow: showGlow ? 'var(--shadow-4)' : 'none',
         overflow: 'hidden',
         flexShrink: 0,
+        transition: 'box-shadow 0.2s ease',
       }}
     >
-      {/* Skeleton shown until rendered */}
       {!rendered && (
         <div
           className="skeleton"
@@ -139,8 +217,11 @@ const PageCanvas = React.memo(({ pdf, pageNum, scale, showGlow }) => {
           display: 'block',
           width: `${dim.width}px`,
           height: `${dim.height}px`,
+          transform: `scale(${displayScale})`,
+          transformOrigin: '0 0',
           opacity: rendered ? 1 : 0,
           transition: 'opacity 0.2s ease',
+          willChange: 'transform',
         }}
       />
     </div>
@@ -150,7 +231,6 @@ const PageCanvas = React.memo(({ pdf, pageNum, scale, showGlow }) => {
 PageCanvas.displayName = 'PageCanvas';
 
 // ─── Infinite Scroll Reader ─────────────────────────────────────────────────
-// forwardRef so parent can call scrollToPage(n) imperatively.
 const InfiniteScrollReader = React.memo(forwardRef(({
   filePath, scale, showGlow, onPageChange, onTotalPages, filter
 }, ref) => {
@@ -158,13 +238,15 @@ const InfiniteScrollReader = React.memo(forwardRef(({
   const [totalPages, setTotalPages] = useState(0);
   const [error, setError] = useState(null);
 
-  // visibleRange: the window of pages we keep mounted
+  // metrics: { height, top, width } for every page
+  const [metrics, setMetrics] = useState([]);
+  const [totalHeight, setTotalHeight] = useState(0);
   const [visibleRange, setVisibleRange] = useState({ start: 0, end: OVERSCAN });
 
   const scrollContainerRef = useRef(null);
-  const pageRefs = useRef([]); // array of refs to each page sentinel div
+  const pageRefs = useRef([]); // kept for scrollToPage logic
   const currentPageRef = useRef(1);
-  const intersectingPages = useRef(new Set());
+  const lastScrollTop = useRef(0);
 
   // ── Load PDF ──────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -185,104 +267,141 @@ const InfiniteScrollReader = React.memo(forwardRef(({
             const data = await readFile(filePath);
             loadingTask = pdfjsLib.getDocument({ data, ...PDF_OPTIONS });
           } catch (fsErr) {
-            console.error('Tauri FS error:', fsErr);
             loadingTask = pdfjsLib.getDocument({ url: filePath, ...PDF_OPTIONS });
           }
         }
         const doc = await loadingTask.promise;
         if (!active) return;
+
+        console.log(`[ISR] Successfully loaded document: ${filePath} (${doc.numPages} pages)`);
+
+        // --- Dimension Pre-calculation ---
+        // We fetch all viewports at scale 1.0 to build a precise height map.
+        // This is done in consecutive blocks to avoid blocking the UI thread too much,
+        // but it's generally very fast as it doesn't render anything.
+        const pageMetrics = [];
+        let currentTop = 0;
+
+        for (let i = 1; i <= doc.numPages; i++) {
+          const page = await doc.getPage(i);
+          const viewport = page.getViewport({ scale: 1.0 });
+          const h = viewport.height;
+          pageMetrics.push({
+            height: h,
+            width: viewport.width,
+            top: currentTop
+          });
+          currentTop += h + PAGE_GAP;
+        }
+
+        if (!active) return;
+        setMetrics(pageMetrics);
+        setTotalHeight(currentTop);
         setPdf(doc);
         setTotalPages(doc.numPages);
         onTotalPages?.(doc.numPages);
       } catch (err) {
-        if (active) setError(err.message || String(err));
+        console.error('[ISR] Critical loading error:', err, filePath);
+        if (active) setError(`${err.message || String(err)} (File: ${filePath})`);
       }
     };
     load();
     return () => { active = false; };
   }, [filePath]);
 
-  // ── Scroll-to-page (exposed via ref) ──────────────────────────────────────
+  // ── Scroll-to-page ────────────────────────────────────────────────────────
   const scrollToPage = useCallback((pageNum, behavior = 'smooth') => {
     const idx = pageNum - 1;
-    const sentinel = pageRefs.current[idx];
-    if (sentinel) {
-      sentinel.scrollIntoView({ behavior, block: 'start' });
-    } else {
-      // page not mounted yet — expand range then scroll
-      setVisibleRange(prev => ({
-        start: Math.max(0, idx - RENDER_BUFFER),
-        end: Math.min(totalPages - 1, idx + RENDER_BUFFER)
-      }));
-      // Give React a tick to mount the element, then scroll
-      requestAnimationFrame(() => {
-        setTimeout(() => {
-          const el = pageRefs.current[idx];
-          el?.scrollIntoView({ behavior, block: 'start' });
-        }, 50);
-      });
+    if (metrics[idx]) {
+      const container = scrollContainerRef.current;
+      if (container) {
+        // Calculate the target scroll top based on metrics and scale
+        const top = metrics[idx].top * scale;
+        // Adjust for container padding (8 * 16px = 32px based on ReaderView.css padding: var(--space-8))
+        // Actually, ReaderView.css says padding: var(--space-8) var(--space-4);
+        // var(--space-8) is 2.5rem = 40px usually. 
+        // We'll just scroll the container.
+        container.scrollTo({ top, behavior });
+      }
     }
-  }, [totalPages]);
+  }, [metrics, scale]);
 
   useImperativeHandle(ref, () => ({ scrollToPage }), [scrollToPage]);
 
-  // ── IntersectionObserver: track which pages are in viewport ───────────────
-  useEffect(() => {
-    if (!totalPages) return;
+  // ── Optimized Visibility Tracking ─────────────────────────────────────────
+  // ── Optimized scroll-based virtualization ─────────────────────────────────
+  const updateVisibleRange = useCallback(() => {
+    if (!metrics.length || !scrollContainerRef.current) return;
 
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach(entry => {
-        const idx = parseInt(entry.target.dataset.pageIdx, 10);
-        if (entry.isIntersecting) {
-          intersectingPages.current.add(idx);
-        } else {
-          intersectingPages.current.delete(idx);
-        }
-      });
+    const container = scrollContainerRef.current;
+    const scrollTop = container.scrollTop;
+    const viewportHeight = container.clientHeight;
 
-      if (intersectingPages.current.size > 0) {
-        const sorted = [...intersectingPages.current].sort((a, b) => a - b);
-        const topPage = sorted[0];
-        const newPage = topPage + 1;
+    // Adjust scrollTop by scale since the metrics are at scale 1.0
+    const scaledScrollTop = scrollTop / scale;
+    const scaledViewportHeight = viewportHeight / scale;
 
-        if (newPage !== currentPageRef.current) {
-          currentPageRef.current = newPage;
-          onPageChange?.(newPage);
-        }
+    // Find the first visible page using binary search on metrics
+    let low = 0;
+    let high = metrics.length - 1;
+    let startIdx = 0;
 
-        // Expand render window to include buffer around visible pages
-        const minVisible = sorted[0];
-        const maxVisible = sorted[sorted.length - 1];
-        const newStart = Math.max(0, minVisible - RENDER_BUFFER);
-        const newEnd = Math.min(totalPages - 1, maxVisible + RENDER_BUFFER);
-
-        setVisibleRange(prev => {
-          if (prev.start !== newStart || prev.end !== newEnd) {
-            return { start: newStart, end: newEnd };
-          }
-          return prev;
-        });
+    while (low <= high) {
+      const mid = Math.floor((low + high) / 2);
+      if (metrics[mid].top <= scaledScrollTop + 10) { // small buffer for precision
+        startIdx = mid;
+        low = mid + 1;
+      } else {
+        high = mid - 1;
       }
-    }, {
-      root: scrollContainerRef.current,
-      rootMargin: '200px 0px',
-      threshold: 0.01,
+    }
+
+    // Find the last visible page
+    let endIdx = startIdx;
+    for (let i = startIdx; i < metrics.length; i++) {
+      if (metrics[i].top > scaledScrollTop + scaledViewportHeight + 400) { // 400px overscan
+        break;
+      }
+      endIdx = i;
+    }
+
+    const newStart = Math.max(0, startIdx - RENDER_BUFFER);
+    const newEnd = Math.min(metrics.length - 1, endIdx + RENDER_BUFFER);
+
+    setVisibleRange(prev => {
+      if (prev.start !== newStart || prev.end !== newEnd) {
+        return { start: newStart, end: newEnd };
+      }
+      return prev;
     });
 
-    pageRefs.current.forEach((el) => {
-      if (el) observer.observe(el);
-    });
+    // Update current page for onPageChange
+    const currentIdx = startIdx + 1;
+    if (currentIdx !== currentPageRef.current) {
+      currentPageRef.current = currentIdx;
+      onPageChange?.(currentIdx);
+    }
+  }, [metrics, scale, onPageChange]);
 
-    return () => observer.disconnect();
-  }, [totalPages, onPageChange]);
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
 
-  // ── Ctrl+Wheel zoom pass-through is handled in ReaderView ─────────────────
+    let rafId;
+    const handleScroll = () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(updateVisibleRange);
+    };
 
-  // ── Page index array ──────────────────────────────────────────────────────
-  const pageIndices = useMemo(
-    () => Array.from({ length: totalPages }, (_, i) => i),
-    [totalPages]
-  );
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    // Initial update
+    updateVisibleRange();
+
+    return () => {
+      container.removeEventListener('scroll', handleScroll);
+      if (rafId) cancelAnimationFrame(rafId);
+    };
+  }, [updateVisibleRange]);
 
   if (error) {
     return (
@@ -295,38 +414,45 @@ const InfiniteScrollReader = React.memo(forwardRef(({
     );
   }
 
+  // Calculate pages to actually render
+  const renderedPages = [];
+  if (pdf && metrics.length) {
+    for (let i = visibleRange.start; i <= visibleRange.end; i++) {
+      const pageNum = i + 1;
+      renderedPages.push(
+        <div
+          key={i}
+          className="isr-page-sentinel"
+          style={{
+            position: 'absolute',
+            top: `${metrics[i].top * scale}px`,
+            left: '50%',
+            transform: 'translateX(-50%)',
+          }}
+        >
+          <PageCanvas
+            pdf={pdf}
+            pageNum={pageNum}
+            scale={scale}
+            showGlow={showGlow}
+          />
+        </div>
+      );
+    }
+  }
+
   return (
     <div className="isr-scroll-container" ref={scrollContainerRef}>
-      <div className="isr-page-stack" style={{ filter }}>
-        {pageIndices.map((idx) => {
-          const pageNum = idx + 1;
-          const inRange = idx >= visibleRange.start && idx <= visibleRange.end;
-
-          return (
-            <div
-              key={idx}
-              ref={el => { pageRefs.current[idx] = el; }}
-              data-page-idx={idx}
-              className="isr-page-sentinel"
-              style={{ marginBottom: PAGE_GAP }}
-            >
-              {!pdf ? (
-                // Skeleton before PDF is loaded
-                <div className="skeleton isr-skeleton-page" />
-              ) : inRange ? (
-                <PageCanvas
-                  pdf={pdf}
-                  pageNum={pageNum}
-                  scale={scale}
-                  showGlow={showGlow}
-                />
-              ) : (
-                // Placeholder for pages outside render window
-                <PagePlaceholder pageNum={pageNum} scale={scale} />
-              )}
-            </div>
-          );
-        })}
+      <div
+        className="isr-page-stack"
+        style={{
+          filter,
+          position: 'relative',
+          height: `${totalHeight * scale}px`,
+          width: '100%'
+        }}
+      >
+        {renderedPages}
       </div>
     </div>
   );
@@ -335,8 +461,6 @@ const InfiniteScrollReader = React.memo(forwardRef(({
 InfiniteScrollReader.displayName = 'InfiniteScrollReader';
 
 // ─── Page Placeholder ───────────────────────────────────────────────────────
-// A sized but empty div shown for pages outside the render window.
-// We use the standard A4 ratio (612:792) scaled.
 const PagePlaceholder = React.memo(({ scale }) => {
   const w = Math.round(612 * scale);
   const h = Math.round(792 * scale);
@@ -350,3 +474,4 @@ const PagePlaceholder = React.memo(({ scale }) => {
 PagePlaceholder.displayName = 'PagePlaceholder';
 
 export default InfiniteScrollReader;
+

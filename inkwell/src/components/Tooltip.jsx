@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, cloneElement } from 'react';
 
-const Tooltip = ({ children, content, delay = 400 }) => {
+const Tooltip = ({ children, content, delay = 400, position = 'top' }) => {
   const [visible, setVisible] = useState(false);
   const timeoutRef = useRef(null);
 
@@ -20,7 +20,11 @@ const Tooltip = ({ children, content, delay = 400 }) => {
   return (
     <div className="tooltip-wrapper" onMouseEnter={show} onMouseLeave={hide}>
       {children}
-      {visible && content && <div className="tooltip">{content}</div>}
+      {visible && content && (
+        <div className={`tooltip ${position}`}>
+          {content}
+        </div>
+      )}
     </div>
   );
 };

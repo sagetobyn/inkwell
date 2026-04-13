@@ -66,11 +66,12 @@ const PdfRenderer = ({ filePath, scale = 1.0, pageNumber = 1, showGlow = true, o
 
         const pdf = await loadingTask.promise;
         if (!active) return;
+        console.log(`[PDF] Loaded ${filePath} (${pdf.numPages} pages)`);
         setPdfDoc(pdf);
         setIsLoading(false);
       } catch (error) {
-        console.error("Error loading PDF:", error);
-        setErrorMsg(`PDF Load Error: ${error.message || JSON.stringify(error)}`);
+        console.error("Critical error loading PDF:", error, filePath);
+        setErrorMsg(`PDF Load Error: ${error.message || JSON.stringify(error)}. Path: ${filePath}`);
         setIsLoading(false);
       }
     };
@@ -168,48 +169,99 @@ const PdfRenderer = ({ filePath, scale = 1.0, pageNumber = 1, showGlow = true, o
         const measureCanvas = document.createElement('canvas');
         const measureCtx = measureCanvas.getContext('2d');
 
-        textContent.items.forEach(item => {
-          if (!item.str || item.str.trim() === '') return;
+        // --- PHASE 12: LOGICAL LINE GROUPING (No Dead Zones) ---
+        // Group items into lines for robust selection bridging.
+        const items = textContent.items.filter(item => item.str && item.str.trim() !== '');
+        const lines = [];
+        const Y_THRESHOLD = 5; // Softened threshold to better handle misaligned multi-style lines
 
-          const span = document.createElement('span');
-          span.textContent = item.str + (item.hasEOL ? '\n' : '');
-
-          // Get the PDF transform matrix mapped to viewport coordinates
+        items.forEach(item => {
           const tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
-
-          // Basic font metric extraction
+          const y = tx[5];
           const fontHeight = Math.sqrt((tx[2] * tx[2]) + (tx[3] * tx[3]));
-          const fontAscent = fontHeight * 0.85; // Heuristic for vertical baseline correction
+          
+          let line = lines.find(l => Math.abs(l.y - y) < Y_THRESHOLD);
+          if (!line) {
+            line = { y, items: [], fontHeight };
+            lines.push(line);
+          }
+          line.items.push({ ...item, tx, fontHeight });
+          // Track largest font height in line for sizing
+          line.fontHeight = Math.max(line.fontHeight, fontHeight);
+        });
 
-          // The PDF intended width in CSS pixels
-          const targetWidth = item.width * viewport.scale;
+        // Sort lines by Y (top to bottom)
+        lines.sort((a, b) => a.y - b.y);
 
-          // Positioning
-          span.style.left = `${tx[4]}px`;
-          span.style.top = `${tx[5] - fontAscent}px`;
-          span.style.fontSize = `${fontHeight}px`;
-          span.style.fontFamily = 'serif, sans-serif'; // Generic fallbacks used for interaction
-
-          // Style setup
-          span.style.position = 'absolute';
-          span.style.color = 'transparent';
-          span.style.whiteSpace = 'pre';
-          span.style.lineHeight = '1';
-          span.style.transformOrigin = '0 0';
-          span.style.cursor = 'text';
-
-          // --- HORIZONTAL SYNC (The 'Mathematical Fit') ---
-          // We measure how wide the browser thinks this word is by default
-          measureCtx.font = `${fontHeight}px serif`;
-          const measuredWidth = measureCtx.measureText(item.str).width;
-
-          // If there is a discrepancy, we force-stretch the word to fit the PDF ink
-          if (measuredWidth > 0 && targetWidth > 0) {
-            const sx = targetWidth / measuredWidth;
-            span.style.transform = `scaleX(${sx})`;
+        lines.forEach((line, index) => {
+          const lineDiv = document.createElement('div');
+          lineDiv.className = 'textLayer-line';
+          
+          // Determine line height and vertical gap bridging
+          const nextLine = lines[index + 1];
+          const lineTop = line.y - line.fontHeight * 0.8;
+          let lineHeightPx;
+          
+          if (nextLine) {
+            const nextLineTop = nextLine.y - nextLine.fontHeight * 0.8;
+            lineHeightPx = Math.max(line.fontHeight * 1.2, nextLineTop - lineTop);
+          } else {
+            // --- FINAL LINE STRETCH ---
+            // Ensure the last line covers the rest of the page to prevent selection resets.
+            const containerHeight = parseFloat(textLayerContainer.style.height) || viewport.height;
+            lineHeightPx = Math.max(line.fontHeight * 1.5, containerHeight - lineTop);
           }
 
-          textLayerContainer.appendChild(span);
+          // Line positioning
+          lineDiv.style.position = 'absolute';
+          lineDiv.style.left = '0';
+          lineDiv.style.width = '100%';
+          lineDiv.style.top = `${lineTop}px`;
+          lineDiv.style.height = `${lineHeightPx}px`;
+          lineDiv.style.pointerEvents = 'auto';
+          lineDiv.style.userSelect = 'text';
+
+          line.items.sort((a, b) => a.tx[4] - b.tx[4]).forEach(item => {
+            const span = document.createElement('span');
+            span.textContent = item.str + (item.hasEOL ? '\n' : '');
+            
+            // --- ATTACH PDF COORDINATE METADATA ---
+            // item.transform [a, b, c, d, e, f] where e=x, f=y in PDF points
+            span.setAttribute('data-pdf-x', item.transform[4]);
+            span.setAttribute('data-pdf-y', item.transform[5]);
+            span.setAttribute('data-pdf-w', item.width);
+            span.setAttribute('data-pdf-h', item.transform[3]); // font height
+            span.setAttribute('data-page', pageNumber);
+            
+            // Positioning relative to line container
+            // We align based on the item's baseline minus its font height
+            const itemTop = item.tx[5] - item.fontHeight * 0.8;
+            span.style.left = `${item.tx[4]}px`;
+            span.style.top = `${itemTop - lineTop}px`;
+            span.style.fontSize = `${item.fontHeight}px`;
+            span.style.fontFamily = 'serif, sans-serif'; 
+            span.style.position = 'absolute';
+            span.style.color = 'transparent';
+            span.style.whiteSpace = 'pre';
+            span.style.lineHeight = '1';
+            span.style.transformOrigin = '0 0';
+            span.style.cursor = 'text';
+
+            // ScaleX calculation
+            const targetWidth = item.width * viewport.scale;
+            const measuredWidth = measureCtx.measureText(item.str).width;
+            if (measuredWidth > 0 && targetWidth > 0) {
+              span.style.transform = `scaleX(${targetWidth / (measuredWidth * (item.fontHeight / item.fontHeight))})`;
+              // (Actually scale is just targetWidth / measuredWidth at fontHeight)
+              // But we already measured at line.fontHeight? No, let's just do it right.
+              measureCtx.font = `${item.fontHeight}px serif`;
+              const preciseMeasuredWidth = measureCtx.measureText(item.str).width;
+              span.style.transform = `scaleX(${targetWidth / preciseMeasuredWidth})`;
+            }
+
+            lineDiv.appendChild(span);
+          });
+          textLayerContainer.appendChild(lineDiv);
         });
 
         // Notify parent about page load
@@ -291,3 +343,4 @@ const PdfRenderer = ({ filePath, scale = 1.0, pageNumber = 1, showGlow = true, o
 };
 
 export default PdfRenderer;
+
