@@ -1,0 +1,124 @@
+/* ========================================================================
+   Command Palette — Obsidian-style modal
+   ======================================================================== */
+
+.cmd-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 18vh;
+  animation: fadeIn 0.1s var(--ease-out) forwards;
+}
+
+.cmd-modal {
+  width: 560px;
+  max-width: 90vw;
+  max-height: 420px;
+  background: var(--ink-surface);
+  border: 1px solid var(--ink-border-strong);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-5);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  animation: scaleIn 0.15s var(--ease-spring) forwards;
+}
+
+.cmd-search-wrapper {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--ink-border);
+}
+
+.cmd-search-icon {
+  color: var(--ink-text-tertiary);
+  flex-shrink: 0;
+}
+
+.cmd-search-input {
+  all: unset;
+  flex: 1;
+  font-size: var(--font-md);
+  color: var(--ink-text-primary);
+  font-family: var(--font-sans);
+}
+
+.cmd-search-input::placeholder {
+  color: var(--ink-text-tertiary);
+}
+
+.cmd-list {
+  overflow-y: auto;
+  padding: var(--space-2);
+  flex: 1;
+}
+
+.cmd-category {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-2xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-text-tertiary);
+  margin-top: var(--space-1);
+}
+
+.cmd-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  width: 100%;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out);
+  color: var(--ink-text-secondary);
+}
+
+.cmd-item:hover,
+.cmd-item.active {
+  background: var(--ink-primary-muted);
+  color: var(--ink-text-primary);
+}
+
+.cmd-item.active {
+  background: var(--ink-primary-muted);
+}
+
+.cmd-item-icon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--ink-text-tertiary);
+}
+
+.cmd-item.active .cmd-item-icon {
+  color: var(--ink-primary);
+}
+
+.cmd-item-label {
+  flex: 1;
+  font-size: var(--font-sm);
+  font-weight: 500;
+}
+
+.cmd-item-shortcut {
+  display: flex;
+  gap: 0.2rem;
+  flex-shrink: 0;
+}
+
+.cmd-empty {
+  padding: var(--space-8);
+  text-align: center;
+  color: var(--ink-text-tertiary);
+  font-size: var(--font-sm);
+}

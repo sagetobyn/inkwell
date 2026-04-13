@@ -1,0 +1,21 @@
+
+[32mnpm run npx[0m 4.6.2
+Tauri Programme within The Commons Conservancy
+Rapidly scaffold out a new tauri app project.
+
+[33mUSAGE:[0m
+  npm run npx [OPTIONS] [PROJECTNAME]
+
+[33mARGS:[0m
+  [32m<PROJECTNAME>[0m                 Specify project name which is used for the directory, package.json and Cargo.toml
+
+[33mOPTIONS:[0m
+  [32m-m[0m, [32m--manager <MANAGER>[0m       Specify preferred package manager [[32mcargo[0m, [32mpnpm[0m, [32myarn[0m, [32mnpm[0m, [32mdeno[0m, [32mbun[0m, [32mdotnet[0m]
+  [32m-t[0m, [32m--template <TEMPLATE>[0m     Specify the UI template to use [[32mvanilla[0m, [32mvanilla-ts[0m, [32mvue[0m, [32mvue-ts[0m, [32msvelte[0m, [32msvelte-ts[0m, [32mreact[0m, [32mreact-ts[0m, [32msolid[0m, [32msolid-ts[0m, [32myew[0m, [32mleptos[0m, [32msycamore[0m, [32mangular[0m, [32mpreact[0m, [32mpreact-ts[0m, [32mblazor[0m, [32mdioxus[0m]
+                    [32m--identifier <identifier>[0m Specify a unique identifier for your application
+  [32m-y[0m, [32m--yes[0m                     Skip prompts and use defaults where applicable
+  [32m-f[0m, [32m--force[0m                   Force create the directory even if it is not empty.
+                    [32m--tauri-version [1 | 2][0m   Bootstrap a project using the provided Tauri version. Defaults to the latest stable release.
+  [32m-h[0m, [32m--help[0m                    Prints help information
+  [32m-v[0m, [32m--version[0m                 Prints version information
+

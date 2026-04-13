@@ -1,0 +1,504 @@
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+@import '@fontsource/inter/700.css';
+
+/* ========================================================================
+   InkWell Design System — Obsidian-Grade Token Foundation
+   ======================================================================== */
+
+:root {
+  /* ── Accent Color (overridden by JS for custom accents) ── */
+  --ink-accent-h: 239;
+  --ink-accent-s: 84%;
+  --ink-accent-l: 67%;
+  --ink-primary: hsl(var(--ink-accent-h), var(--ink-accent-s), var(--ink-accent-l));
+  --ink-primary-hover: hsl(var(--ink-accent-h), var(--ink-accent-s), calc(var(--ink-accent-l) - 8%));
+  --ink-primary-muted: hsla(var(--ink-accent-h), var(--ink-accent-s), var(--ink-accent-l), 0.15);
+  --ink-primary-glow: hsla(var(--ink-accent-h), var(--ink-accent-s), var(--ink-accent-l), 0.35);
+
+  /* ── Dark theme surfaces (layered depth like Obsidian) ── */
+  --ink-bg: #0e1015;
+  --ink-bg-secondary: #12151c;
+  --ink-surface-0: #161922;
+  --ink-surface: #1a1e2a;
+  --ink-surface-2: #222738;
+  --ink-surface-3: #2a3045;
+  --ink-surface-hover: #2e3450;
+  --ink-surface-active: #353c58;
+
+  /* ── Borders ── */
+  --ink-border: rgba(255, 255, 255, 0.07);
+  --ink-border-strong: rgba(255, 255, 255, 0.12);
+  --ink-border-accent: hsla(var(--ink-accent-h), var(--ink-accent-s), var(--ink-accent-l), 0.3);
+
+  /* ── Text hierarchy ── */
+  --ink-text-primary: #e8ecf4;
+  --ink-text-secondary: #8892a8;
+  --ink-text-tertiary: #5c6478;
+  --ink-text-on-accent: #ffffff;
+
+  /* ── Semantic colors ── */
+  --ink-success: #34d399;
+  --ink-warning: #fbbf24;
+  --ink-danger: #f87171;
+  --ink-info: #60a5fa;
+
+  /* ── Teal accent (secondary) ── */
+  --ink-accent-teal: #14b8a6;
+
+  /* ── Typography ── */
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+
+  --font-2xs: 0.65rem;
+  --font-xs: 0.75rem;
+  --font-sm: 0.8125rem;
+  --font-base: 0.875rem;
+  --font-md: 0.9375rem;
+  --font-lg: 1.0625rem;
+  --font-xl: 1.25rem;
+  --font-2xl: 1.5rem;
+  --font-3xl: 2rem;
+
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.65;
+
+  /* ── Spacing scale ── */
+  --space-0: 0;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+
+  /* ── Radii ── */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+
+  /* ── Shadows (5-level depth system) ── */
+  --shadow-1: 0 1px 2px rgba(0,0,0,0.3);
+  --shadow-2: 0 2px 6px rgba(0,0,0,0.35), 0 1px 2px rgba(0,0,0,0.25);
+  --shadow-3: 0 4px 12px rgba(0,0,0,0.4), 0 2px 4px rgba(0,0,0,0.25);
+  --shadow-4: 0 8px 24px rgba(0,0,0,0.45), 0 4px 8px rgba(0,0,0,0.25);
+  --shadow-5: 0 16px 48px rgba(0,0,0,0.5), 0 8px 16px rgba(0,0,0,0.3);
+  --shadow-glass: 0 4px 30px rgba(0,0,0,0.4);
+  --shadow-glow: 0 0 20px var(--ink-primary-glow);
+
+  /* ── Glass effects ── */
+  --glass-subtle: rgba(22, 25, 34, 0.5);
+  --glass-medium: rgba(22, 25, 34, 0.7);
+  --glass-strong: rgba(22, 25, 34, 0.85);
+  --glass-blur-sm: 8px;
+  --glass-blur-md: 16px;
+  --glass-blur-lg: 24px;
+
+  /* ── Transitions ── */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.45, 0, 0.55, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+
+  --duration-fast: 120ms;
+  --duration-normal: 200ms;
+  --duration-slow: 350ms;
+  --duration-slower: 500ms;
+
+  --transition-fast: var(--duration-fast) var(--ease-out);
+  --transition-normal: var(--duration-normal) var(--ease-out);
+  --transition-slow: var(--duration-slow) var(--ease-out);
+
+  /* ── Z-index scale ── */
+  --z-base: 0;
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-overlay: 300;
+  --z-modal: 400;
+  --z-toast: 500;
+  --z-tooltip: 600;
+
+  /* ── Sidebar & layout ── */
+  --activity-bar-width: 48px;
+  --sidebar-width: 260px;
+  --sidebar-collapsed-width: 0px;
+  --header-height: 52px;
+  --status-bar-height: 28px;
+}
+
+/* ========================================================================
+   Light Theme
+   ======================================================================== */
+.light-theme {
+  --ink-bg: #f5f6f8;
+  --ink-bg-secondary: #eef0f4;
+  --ink-surface-0: #e8eaef;
+  --ink-surface: #ffffff;
+  --ink-surface-2: #f8f9fb;
+  --ink-surface-3: #f0f2f5;
+  --ink-surface-hover: #e9ecf2;
+  --ink-surface-active: #dfe3eb;
+
+  --ink-border: rgba(0, 0, 0, 0.08);
+  --ink-border-strong: rgba(0, 0, 0, 0.14);
+
+  --ink-text-primary: #1a1d26;
+  --ink-text-secondary: #5c6478;
+  --ink-text-tertiary: #8892a8;
+
+  --shadow-1: 0 1px 2px rgba(0,0,0,0.06);
+  --shadow-2: 0 2px 6px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-3: 0 4px 12px rgba(0,0,0,0.1), 0 2px 4px rgba(0,0,0,0.05);
+  --shadow-4: 0 8px 24px rgba(0,0,0,0.12), 0 4px 8px rgba(0,0,0,0.06);
+  --shadow-5: 0 16px 48px rgba(0,0,0,0.14), 0 8px 16px rgba(0,0,0,0.06);
+  --shadow-glass: 0 4px 30px rgba(0,0,0,0.06);
+
+  --glass-subtle: rgba(255, 255, 255, 0.5);
+  --glass-medium: rgba(255, 255, 255, 0.75);
+  --glass-strong: rgba(255, 255, 255, 0.9);
+}
+
+/* ========================================================================
+   Reset & Base
+   ======================================================================== */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: var(--font-base);
+  background-color: var(--ink-bg);
+  color: var(--ink-text-primary);
+  line-height: var(--leading-normal);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+  user-select: none;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--ink-primary-muted);
+  color: var(--ink-text-primary);
+}
+
+/* ── Custom Scrollbars ── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--ink-text-tertiary);
+  border-radius: var(--radius-full);
+  transition: background var(--transition-fast);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ink-text-secondary);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ========================================================================
+   Glass Panel Utility
+   ======================================================================== */
+.glass-panel {
+  background: var(--glass-medium);
+  backdrop-filter: blur(var(--glass-blur-md));
+  -webkit-backdrop-filter: blur(var(--glass-blur-md));
+  border: 1px solid var(--ink-border);
+  box-shadow: var(--shadow-glass);
+}
+
+.glass-panel-subtle {
+  background: var(--glass-subtle);
+  backdrop-filter: blur(var(--glass-blur-sm));
+  -webkit-backdrop-filter: blur(var(--glass-blur-sm));
+  border: 1px solid var(--ink-border);
+}
+
+/* ========================================================================
+   Buttons
+   ======================================================================== */
+button {
+  all: unset;
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: all var(--transition-fast);
+  font-family: var(--font-sans);
+}
+
+button:focus-visible {
+  outline: 2px solid var(--ink-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* ========================================================================
+   Animations
+   ======================================================================== */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(8px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes slideDown {
+  from { transform: translateY(-8px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes slideLeft {
+  from { transform: translateX(12px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes slideRight {
+  from { transform: translateX(-12px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes glowPulse {
+  0%, 100% { box-shadow: 0 0 8px var(--ink-primary-glow); }
+  50% { box-shadow: 0 0 20px var(--ink-primary-glow); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-6px); }
+}
+
+@keyframes progressStripe {
+  0% { background-position: 1rem 0; }
+  100% { background-position: 0 0; }
+}
+
+.animate-fade-in {
+  animation: fadeIn var(--duration-normal) var(--ease-out) forwards;
+}
+
+.animate-slide-up {
+  animation: slideUp var(--duration-slow) var(--ease-out) forwards;
+}
+
+.animate-slide-down {
+  animation: slideDown var(--duration-slow) var(--ease-out) forwards;
+}
+
+.animate-scale-in {
+  animation: scaleIn var(--duration-normal) var(--ease-spring) forwards;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+/* ========================================================================
+   PDF Text Layer
+   ======================================================================== */
+.textLayer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  line-height: 1.0;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  z-index: 2;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.textLayer span {
+  color: transparent !important;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+}
+
+.textLayer ::selection {
+  background: hsla(var(--ink-accent-h), var(--ink-accent-s), var(--ink-accent-l), 0.35);
+  color: transparent !important;
+}
+
+/* ========================================================================
+   Dictionary Popover
+   ======================================================================== */
+.dictionary-popover {
+  position: absolute;
+  max-width: 320px;
+  background: var(--ink-surface);
+  border: 1px solid var(--ink-border-strong);
+  box-shadow: var(--shadow-4);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  z-index: var(--z-tooltip);
+  color: var(--ink-text-primary);
+  pointer-events: none;
+  user-select: none;
+  animation: scaleIn 0.15s var(--ease-spring) forwards;
+}
+
+.dictionary-popover h3 {
+  color: var(--ink-primary);
+  margin-bottom: var(--space-1);
+  font-size: var(--font-md);
+  font-weight: 700;
+}
+
+.dictionary-popover .pos {
+  font-size: var(--font-xs);
+  color: var(--ink-accent-teal);
+  font-style: italic;
+  margin-bottom: var(--space-2);
+}
+
+.dictionary-popover p {
+  font-size: var(--font-sm);
+  line-height: var(--leading-relaxed);
+  color: var(--ink-text-secondary);
+}
+
+/* ========================================================================
+   Shimmer Loading Skeleton
+   ======================================================================== */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--ink-surface) 25%,
+    var(--ink-surface-2) 50%,
+    var(--ink-surface) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: var(--radius-md);
+}
+
+/* ========================================================================
+   Utility Classes
+   ======================================================================== */
+.mono {
+  font-family: var(--font-mono);
+}
+
+.truncate {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* ========================================================================
+   PDF Renderer — Error & Skeleton
+   ======================================================================== */
+.pdf-error-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-8);
+  background: var(--ink-surface);
+  border: 1px solid rgba(248, 113, 113, 0.2);
+  border-radius: var(--radius-xl);
+  max-width: 400px;
+  text-align: center;
+}
+
+.pdf-error-icon {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(248, 113, 113, 0.1);
+  color: var(--ink-danger);
+  font-size: var(--font-xl);
+  font-weight: 800;
+}
+
+.pdf-error-msg {
+  font-size: var(--font-sm);
+  color: var(--ink-text-secondary);
+  line-height: var(--leading-relaxed);
+  word-break: break-word;
+}
+
+.pdf-skeleton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pdf-canvas {
+  background: transparent;
+}
