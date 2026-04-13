@@ -1,5 +1,5 @@
 /* ========================================================================
-   Library View — Obsidian-grade redesign
+   Library View — Premium Redesign
    ======================================================================== */
 
 /* ── Container ── */
@@ -19,8 +19,8 @@
   align-items: center;
   height: var(--header-height);
   padding: 0 var(--space-4);
+  background: var(--ink-bg);
   border-bottom: 1px solid var(--ink-border);
-  background: var(--ink-surface-0);
   gap: var(--space-4);
   z-index: var(--z-sticky);
   flex-shrink: 0;
@@ -110,12 +110,12 @@
    ======================================================================== */
 .lib-sidebar {
   width: var(--sidebar-width);
-  background: var(--ink-surface-0);
+  background: var(--ink-bg);
   border-right: 1px solid var(--ink-border);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  transition: width var(--duration-slow) var(--ease-out), opacity var(--duration-normal) var(--ease-out);
+  transition: width var(--duration-normal) var(--ease-out), opacity var(--duration-normal) var(--ease-out);
   flex-shrink: 0;
 }
 
@@ -127,10 +127,10 @@
 }
 
 .sidebar-content {
-  padding: var(--space-4) var(--space-3);
+  padding: var(--space-2);
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: 2px;
   min-width: var(--sidebar-width);
   overflow-y: auto;
   height: 100%;
@@ -162,25 +162,26 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-md);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   color: var(--ink-text-secondary);
   font-size: var(--font-sm);
-  font-weight: 500;
+  font-weight: 400;
   transition: all var(--transition-fast);
   position: relative;
+  min-height: 28px;
 }
 
 .sidebar-item:hover {
-  background: var(--ink-surface-hover);
+  background: var(--ink-surface-0);
   color: var(--ink-text-primary);
 }
 
 .sidebar-item.active {
-  background: var(--ink-primary-muted);
+  background: var(--ink-surface-2);
   color: var(--ink-primary);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .sidebar-item.active::before {
@@ -189,10 +190,10 @@
   left: 0;
   top: 50%;
   transform: translateY(-50%);
-  width: 3px;
-  height: 16px;
+  width: 2px;
+  height: 14px;
   background: var(--ink-primary);
-  border-radius: 0 var(--radius-full) var(--radius-full) 0;
+  border-radius: 0 4px 4px 0;
 }
 
 .sidebar-item-inner {
@@ -227,7 +228,7 @@
 }
 
 /* ========================================================================
-   Content
+   Content Area
    ======================================================================== */
 .lib-content {
   flex: 1;
@@ -331,7 +332,307 @@
 }
 
 /* ========================================================================
-   Recent Books Strip
+   Continue Reading Hero
+   ======================================================================== */
+.hero-section {
+  padding: 0 var(--space-6) var(--space-4);
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.hero-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  padding: var(--space-6) var(--space-8);
+  border-radius: var(--radius-lg);
+  background: var(--ink-surface-0);
+  border: 1px solid var(--ink-border-strong);
+  box-shadow: var(--shadow-2);
+  transition: all var(--transition-normal);
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+
+.hero-card::before {
+  content: '';
+  position: absolute;
+  inset: -100%;
+  background: 
+    radial-gradient(ellipse at 20% 50%, hsla(var(--ink-accent-h), 70%, 60%, 0.06) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 30%, hsla(calc(var(--ink-accent-h) + 60), 60%, 50%, 0.04) 0%, transparent 50%);
+  background-size: 200% 200%;
+  animation: gradientShift 12s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.hero-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.hero-card:hover {
+  background: var(--ink-surface-hover);
+  border-color: var(--ink-text-tertiary);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-4);
+}
+
+.hero-cover {
+  width: 100px;
+  height: 140px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+  box-shadow: var(--shadow-4);
+  transition: transform var(--transition-normal);
+}
+
+.hero-card:hover .hero-cover {
+  transform: scale(1.05) rotateY(-3deg);
+}
+
+.hero-cover-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.hero-cover-letter {
+  font-size: 3rem;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.hero-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.hero-label {
+  font-size: var(--font-2xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-primary);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.hero-label-dot {
+  width: 6px;
+  height: 6px;
+  background: var(--ink-primary);
+  border-radius: 50%;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.hero-title {
+  font-size: var(--font-2xl);
+  font-weight: 700;
+  line-height: var(--leading-tight);
+  letter-spacing: -0.02em;
+}
+
+.hero-meta {
+  font-size: var(--font-sm);
+  color: var(--ink-text-secondary);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.hero-resume-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: var(--ink-primary);
+  color: var(--ink-text-on-accent);
+  padding: 0.6rem 1.5rem;
+  border-radius: var(--radius-full);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  box-shadow: var(--shadow-glow), var(--shadow-2);
+  transition: all var(--transition-fast);
+  margin-top: var(--space-2);
+  width: fit-content;
+}
+
+.hero-resume-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0 30px var(--ink-primary-glow), var(--shadow-3);
+}
+
+.hero-resume-btn:active {
+  transform: translateY(0) scale(0.98);
+}
+
+.hero-progress-ring {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.hero-progress-text {
+  position: absolute;
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  font-weight: 700;
+  color: var(--ink-primary);
+}
+
+/* ========================================================================
+   Reading Stats Strip
+   ======================================================================== */
+.stats-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-3);
+  padding: 0 var(--space-6) var(--space-4);
+  flex-shrink: 0;
+}
+
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  background: var(--ink-surface-0);
+  border: 1px solid var(--ink-border);
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-normal);
+}
+
+.stat-card:hover {
+  border-color: var(--ink-border-strong);
+  background: var(--ink-surface-hover);
+  transform: translateY(-1px);
+}
+
+.stat-card-value {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: var(--font-xl);
+  background: linear-gradient(135deg, var(--ink-text-primary) 0%, var(--ink-primary) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.stat-card-label {
+  font-size: var(--font-2xs);
+  color: var(--ink-text-tertiary);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.stat-card-icon {
+  color: var(--ink-primary);
+  opacity: 0.6;
+  margin-bottom: var(--space-1);
+}
+
+/* ========================================================================
+   Favorites Shelf
+   ======================================================================== */
+.favorites-section {
+  padding: 0 var(--space-6) var(--space-4);
+  flex-shrink: 0;
+}
+
+.favorites-scroll {
+  display: flex;
+  gap: var(--space-4);
+  overflow-x: auto;
+  padding-bottom: var(--space-2);
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+}
+
+.favorites-scroll::-webkit-scrollbar {
+  height: 4px;
+}
+
+.favorite-card {
+  flex-shrink: 0;
+  width: 130px;
+  cursor: pointer;
+  transition: transform var(--transition-fast);
+  scroll-snap-align: start;
+  perspective: 600px;
+}
+
+.favorite-card:hover {
+  transform: translateY(-5px);
+}
+
+.favorite-cover {
+  width: 100%;
+  aspect-ratio: 2 / 2.8;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: var(--space-2);
+  position: relative;
+  overflow: hidden;
+  box-shadow: var(--shadow-3);
+  transition: all var(--transition-normal);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.favorite-card:hover .favorite-cover {
+  box-shadow: var(--shadow-5), 0 0 25px hsla(var(--ink-accent-h), var(--ink-accent-s), var(--ink-accent-l), 0.15);
+  transform: rotateY(-4deg);
+}
+
+.favorite-cover-letter {
+  font-size: 2.5rem;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.favorite-badge {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  color: #f87171;
+}
+
+.favorite-name {
+  font-size: var(--font-2xs);
+  color: var(--ink-text-secondary);
+  display: block;
+  text-align: center;
+  line-height: var(--leading-tight);
+}
+
+/* ========================================================================
+   Recent Books Strip (Enhanced)
    ======================================================================== */
 .recent-section {
   padding: 0 var(--space-6) var(--space-4);
@@ -344,10 +645,10 @@
   gap: var(--space-2);
   margin-bottom: var(--space-3);
   color: var(--ink-text-tertiary);
-  font-size: var(--font-xs);
-  font-weight: 600;
+  font-size: var(--font-2xs);
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.1em;
 }
 
 .recent-scroll {
@@ -355,17 +656,25 @@
   gap: var(--space-3);
   overflow-x: auto;
   padding-bottom: var(--space-2);
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+}
+
+.recent-scroll::-webkit-scrollbar {
+  height: 4px;
 }
 
 .recent-card {
   flex-shrink: 0;
-  width: 100px;
+  width: 90px;
   cursor: pointer;
-  transition: transform var(--transition-fast);
+  transition: all var(--transition-fast);
+  scroll-snap-align: start;
 }
 
 .recent-card:hover {
-  transform: translateY(-3px);
+  transform: translateY(-4px) scale(1.05);
+  z-index: 10;
 }
 
 .recent-cover {
@@ -401,7 +710,8 @@
 }
 
 .book-cover::after,
-.recent-cover::after {
+.recent-cover::after,
+.favorite-cover::after {
   content: '';
   position: absolute;
   inset: 0;
@@ -442,7 +752,7 @@
 }
 
 /* ========================================================================
-   Books Grid
+   Books Grid (Enhanced with 3D)
    ======================================================================== */
 .subfolder-group {
   margin-bottom: var(--space-6);
@@ -462,39 +772,64 @@
 
 .books-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(calc(160px * var(--ink-grid-scale, 1)), 1fr));
   gap: var(--space-5);
 }
 
 .book-card {
   cursor: pointer;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   transition: all var(--duration-normal) var(--ease-out);
-  padding: var(--space-3);
+  padding: var(--space-2);
   position: relative;
+  perspective: 1000px;
 }
 
 .book-card:hover {
-  background: var(--ink-surface);
-  box-shadow: var(--shadow-3);
-  transform: translateY(-4px);
+  background: var(--ink-surface-0);
 }
 
 .book-cover {
   aspect-ratio: 2 / 3;
-  border-radius: var(--radius-md);
+  border-radius: var(--ink-book-radius);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: var(--shadow-2);
+  box-shadow: var(--ink-book-shadow);
   margin-bottom: var(--space-3);
   transition: all var(--transition-normal);
   position: relative;
   overflow: hidden;
+  background: var(--ink-surface);
+}
+
+.book-spine-detail {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 12px;
+  background: linear-gradient(90deg, 
+    rgba(255, 255, 255, 0.08) 0%, 
+    rgba(255, 255, 255, 0.03) 20%, 
+    rgba(0, 0, 0, 0.05) 90%, 
+    rgba(0, 0, 0, 0.1) 100%
+  );
+  z-index: 2;
+  border-right: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 .book-card:hover .book-cover {
-  box-shadow: var(--shadow-4), 0 0 30px rgba(var(--ink-accent-h), 50%, 50%, 0.15);
+  box-shadow: var(--ink-book-shadow-hover);
+  transform: rotateY(-8deg) rotateX(4deg) translateZ(10px) translateX(2px);
+}
+
+.book-cover-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  z-index: 1;
 }
 
 .book-cover-letter {
@@ -547,7 +882,7 @@
 
 .progress-fill-slim {
   height: 100%;
-  background: var(--ink-primary);
+  background: linear-gradient(90deg, var(--ink-primary), hsl(calc(var(--ink-accent-h) + 30), var(--ink-accent-s), var(--ink-accent-l)));
   border-radius: var(--radius-full);
   transition: width var(--duration-normal) var(--ease-out);
 }
@@ -593,6 +928,7 @@
   font-weight: 700;
   color: rgba(255,255,255,0.4);
   box-shadow: var(--shadow-1);
+  overflow: hidden;
 }
 
 .book-list-info {
@@ -625,7 +961,7 @@
 
 .progress-fill-mini {
   height: 100%;
-  background: var(--ink-primary);
+  background: linear-gradient(90deg, var(--ink-primary), hsl(calc(var(--ink-accent-h) + 30), var(--ink-accent-s), var(--ink-accent-l)));
   border-radius: var(--radius-full);
 }
 
@@ -642,7 +978,7 @@
 }
 
 /* ========================================================================
-   Empty State
+   Empty State (Premium Onboarding)
    ======================================================================== */
 .empty-state {
   display: flex;
@@ -652,24 +988,40 @@
   padding: var(--space-16);
   text-align: center;
   gap: var(--space-3);
+  position: relative;
 }
 
 .empty-state-icon {
-  width: 80px;
-  height: 80px;
+  width: 100px;
+  height: 100px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: var(--ink-surface);
-  color: var(--ink-text-tertiary);
+  background: linear-gradient(135deg, var(--ink-surface) 0%, var(--ink-surface-2) 100%);
+  color: var(--ink-primary);
   margin-bottom: var(--space-4);
-  border: 1px solid var(--ink-border);
+  border: 1px solid var(--ink-border-accent);
+  box-shadow: var(--shadow-glow);
+  animation: inkDrop 0.6s var(--ease-spring) forwards, breathe 3s ease-in-out infinite 0.6s;
+  position: relative;
+}
+
+.empty-state-icon::after {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  border: 1px solid hsla(var(--ink-accent-h), var(--ink-accent-s), var(--ink-accent-l), 0.15);
+  animation: breathe 3s ease-in-out infinite 0.8s;
 }
 
 .empty-state h3 {
-  font-size: var(--font-lg);
+  font-size: var(--font-xl);
   font-weight: 700;
+  background: linear-gradient(135deg, var(--ink-text-primary) 0%, var(--ink-primary) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .empty-state p {
@@ -682,6 +1034,60 @@
   display: flex;
   gap: var(--space-3);
   margin-top: var(--space-4);
+}
+
+.empty-state-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+  margin-top: var(--space-6);
+  width: 100%;
+  max-width: 460px;
+}
+
+.empty-action-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-6) var(--space-5);
+  background: var(--glass-subtle);
+  backdrop-filter: blur(var(--glass-blur-sm));
+  -webkit-backdrop-filter: blur(var(--glass-blur-sm));
+  border: 1px solid var(--ink-border);
+  border-radius: var(--radius-xl);
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  text-align: center;
+}
+
+.empty-action-card:hover {
+  background: var(--glass-medium);
+  border-color: var(--ink-border-accent);
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-3), 0 0 30px hsla(var(--ink-accent-h), var(--ink-accent-s), var(--ink-accent-l), 0.08);
+}
+
+.empty-action-icon {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-lg);
+  background: var(--ink-primary-muted);
+  color: var(--ink-primary);
+}
+
+.empty-action-label {
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--ink-text-primary);
+}
+
+.empty-action-desc {
+  font-size: var(--font-2xs);
+  color: var(--ink-text-tertiary);
 }
 
 /* ========================================================================

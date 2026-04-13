@@ -11,6 +11,20 @@ export default defineConfig(async () => ({
   //
   // 1. prevent Vite from obscuring rust errors
   clearScreen: false,
+
+  // Build optimizations: split PDF.js into its own chunk for faster initial load
+  build: {
+    cssMinify: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'pdfjs': ['pdfjs-dist/legacy/build/pdf.mjs'],
+          'react-vendor': ['react', 'react-dom'],
+        },
+      },
+    },
+  },
+
   // 2. tauri expects a fixed port, fail if that port is not available
   server: {
     port: 1420,
@@ -29,3 +43,4 @@ export default defineConfig(async () => ({
     },
   },
 }));
+

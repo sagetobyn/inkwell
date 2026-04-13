@@ -7,21 +7,23 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-md);
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
   color: var(--ink-text-secondary);
   transition: all var(--transition-fast);
   flex-shrink: 0;
+  border: 1px solid transparent;
 }
 
 .icon-btn:hover {
   background: var(--ink-surface-hover);
   color: var(--ink-text-primary);
+  border-color: var(--ink-border-strong);
 }
 
 .icon-btn:active {
-  transform: scale(0.92);
+  transform: scale(0.96);
 }
 
 .icon-btn.active {
@@ -58,22 +60,23 @@
   gap: var(--space-2);
   background: var(--ink-primary);
   color: var(--ink-text-on-accent);
-  padding: 0.5rem 1rem;
-  border-radius: var(--radius-md);
+  padding: 0.4rem 1.25rem;
+  border-radius: var(--radius-sm);
   font-size: var(--font-sm);
   font-weight: 600;
   transition: all var(--transition-fast);
-  box-shadow: var(--shadow-1);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .btn-primary:hover {
   background: var(--ink-primary-hover);
-  box-shadow: var(--shadow-2);
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
   transform: translateY(-1px);
 }
 
 .btn-primary:active {
-  transform: translateY(0) scale(0.98);
+  transform: translateY(0) scale(0.97);
 }
 
 /* ── Ghost Button ── */
@@ -99,19 +102,19 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  background: var(--ink-surface-2);
+  background: var(--ink-surface-0);
   color: var(--ink-text-primary);
-  padding: 0.5rem 1rem;
-  border-radius: var(--radius-md);
+  padding: 0.4rem 1rem;
+  border-radius: var(--radius-sm);
   font-size: var(--font-sm);
   font-weight: 500;
-  border: 1px solid var(--ink-border);
+  border: 1px solid var(--ink-border-strong);
   transition: all var(--transition-fast);
 }
 
 .btn-surface:hover {
   background: var(--ink-surface-hover);
-  border-color: var(--ink-border-strong);
+  border-color: var(--ink-text-tertiary);
 }
 
 /* ── Kbd Badge (keyboard shortcut display) ── */
@@ -390,4 +393,32 @@
   height: 1px;
   background: var(--ink-border);
   margin: var(--space-1) var(--space-2);
+}
+
+/* ── Danger Icon Button ── */
+.icon-btn-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  color: var(--ink-text-tertiary);
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.icon-btn-danger:hover {
+  background: rgba(248, 113, 113, 0.12);
+  color: var(--ink-danger);
+}
+
+.icon-btn-danger:active {
+  transform: scale(0.92);
+}
+
+/* ── Active state for small icon buttons ── */
+.icon-btn-sm.active {
+  background: var(--ink-primary-muted);
+  color: var(--ink-primary);
 }

@@ -7,12 +7,99 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content="InkWell — A premium, offline-first PDF reader for deep reading." />
   <title>InkWell — Reader</title>
+
+  <!-- Preload critical font (Inter is bundled via @fontsource, but hint the browser) -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <!-- Load JetBrains Mono asynchronously to avoid blocking render -->
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
+  <noscript>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  </noscript>
+
+  <!-- Inline critical CSS for instant loading skeleton -->
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: #0e1015;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      overflow: hidden;
+      color: white;
+    }
+
+    #root {
+      display: flex;
+      height: 100vh;
+      width: 100vw;
+    }
+
+    /* Splash Screen Styles */
+    #splash {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: #0e1015;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      transition: opacity 0.4s ease, visibility 0.4s;
+    }
+
+    .splash-logo {
+      font-size: 2.5rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, #818cf8 0%, #c084fc 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 1.5rem;
+      font-family: 'Inter', sans-serif;
+    }
+
+    .splash-loader {
+      width: 40px;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .splash-loader::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 100%;
+      width: 50%;
+      background: linear-gradient(90deg, #818cf8, #c084fc);
+      border-radius: 10px;
+      animation: slide 1.5s infinite ease-in-out;
+    }
+
+    @keyframes slide {
+      0% { left: -50%; }
+      100% { left: 100%; }
+    }
+
+    .splash-hidden {
+      opacity: 0;
+      visibility: hidden;
+    }
+  </style>
 </head>
 
 <body>
+  <div id="splash">
+    <div class="splash-logo">InkWell</div>
+    <div class="splash-loader"></div>
+  </div>
   <div id="root"></div>
   <script type="module" src="/src/main.jsx"></script>
 </body>

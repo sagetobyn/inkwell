@@ -38,3 +38,20 @@
   --header-height: 60px;
   --status-bar-height: 32px;
 }
+
+/* ── Premium View Transitions ── */
+.view-transition {
+  animation: viewEnter var(--duration-slow) var(--ease-spring) forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes viewEnter {
+  from { 
+    opacity: 0; 
+    transform: scale(0.985) translateY(10px); 
+  }
+  to { 
+    opacity: 1; 
+    transform: scale(1) translateY(0); 
+  }
+}

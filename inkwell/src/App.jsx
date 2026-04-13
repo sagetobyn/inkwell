@@ -20,7 +20,12 @@ const AppContent = () => {
     pdfNightMode, togglePdfNightMode,
     closeBook, currentBook,
     settings,
+    openSettingsWindow,
   } = useAppContext();
+
+  const isSettingsWindow = useMemo(() => {
+    return new URLSearchParams(window.location.search).get('view') === 'settings';
+  }, []);
 
   // Global keyboard listener for command palette
   useEffect(() => {
@@ -50,7 +55,7 @@ const AppContent = () => {
         icon: <Settings size={16} />,
         category: 'Navigation',
         shortcut: 'Ctrl+,',
-        action: () => setCurrentView('settings'),
+        action: openSettingsWindow,
       },
       {
         id: 'go-library',
@@ -91,20 +96,22 @@ const AppContent = () => {
   }, [settings.uiDensity]);
 
   return (
-    <div className="app-container">
-      <main className="view-container" key={currentView}>
-        <div className={`view-transition ${settings.animationsEnabled !== false ? 'animate-fade-in' : ''}`}>
+    <div className={`app-container ${isSettingsWindow ? 'settings-window-active' : ''}`}>
+      <main className="view-container">
+        <div className="view-transition" key={currentView}>
           {currentView === 'library' && <LibraryView />}
           {currentView === 'reader' && <ReaderView />}
           {currentView === 'settings' && <SettingsView />}
         </div>
       </main>
 
-      <CommandPalette
-        isOpen={commandPaletteOpen}
-        onClose={() => setCommandPaletteOpen(false)}
-        commands={commands}
-      />
+      {!isSettingsWindow && (
+        <CommandPalette
+          isOpen={commandPaletteOpen}
+          onClose={() => setCommandPaletteOpen(false)}
+          commands={commands}
+        />
+      )}
     </div>
   );
 };

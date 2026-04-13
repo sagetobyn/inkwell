@@ -9,6 +9,7 @@
     "core:default",
     "core:window:default",
     "core:window:allow-set-fullscreen",
+    "core:webview:allow-create-webview-window",
     "opener:default",
     "fs:default",
     "dialog:default",
@@ -23,6 +24,22 @@
     },
     {
       "identifier": "fs:allow-read-file",
+      "allow": [
+        {
+          "path": "**"
+        }
+      ]
+    },
+    {
+      "identifier": "fs:allow-write-file",
+      "allow": [
+        {
+          "path": "**"
+        }
+      ]
+    },
+    {
+      "identifier": "fs:allow-mkdir",
       "allow": [
         {
           "path": "**"

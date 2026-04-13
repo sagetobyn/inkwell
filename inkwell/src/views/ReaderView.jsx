@@ -54,15 +54,23 @@ const ReaderView = () => {
 
   // ── Save page progress whenever page changes ────────────────────────────
   const contentRef = useRef(null); // used by single-page mode for scroll reset
+  const progressUpdateTimer = useRef(null);
   useEffect(() => {
     if (currentBook?.path) {
-      updateBookProgress(currentBook.path, page);
+      // Debounce the context update to prevent rapid re-renders during scroll
+      if (progressUpdateTimer.current) clearTimeout(progressUpdateTimer.current);
+      progressUpdateTimer.current = setTimeout(() => {
+        updateBookProgress(currentBook.path, page);
+      }, 1000); 
     }
     // Reset scroll in single-page mode
     if (!infiniteScroll && contentRef.current) {
       contentRef.current.scrollTop = 0;
       contentRef.current.scrollLeft = 0;
     }
+    return () => {
+      if (progressUpdateTimer.current) clearTimeout(progressUpdateTimer.current);
+    };
   }, [page, currentBook?.path, infiniteScroll]);
 
   // ── Scroll to initial saved page when PDF loads ─────────────────────────
@@ -72,10 +80,8 @@ const ReaderView = () => {
   useEffect(() => {
     if (pdfReady && !initialScrollDone.current && initialPage > 1) {
       initialScrollDone.current = true;
-      // Small delay to let pages mount
-      setTimeout(() => {
-        readerRef.current?.scrollToPage(initialPage);
-      }, 200);
+      // Use "auto" (instant) for initial jump to prevent intermediate page observer triggers
+      readerRef.current?.scrollToPage(initialPage, 'auto');
     }
   }, [pdfReady, initialPage]);
 
@@ -112,22 +118,42 @@ const ReaderView = () => {
 
   // ── Auto-hide controls ──────────────────────────────────────────────────
   const resetControlsTimer = useCallback(() => {
+    // Zen Mode 'always' keeps controls hidden until specifically toggled or mouse movement (briefly)
+    if (settings.readerZenMode === 'always') {
+      setShowControls(false);
+      if (controlsTimeout.current) clearTimeout(controlsTimeout.current);
+      return;
+    }
+
     setShowControls(true);
     if (controlsTimeout.current) clearTimeout(controlsTimeout.current);
     controlsTimeout.current = setTimeout(() => {
       setShowControls(false);
     }, (settings.autoHideDelay || 3) * 1000);
-  }, [settings.autoHideDelay]);
+  }, [settings.autoHideDelay, settings.readerZenMode]);
 
   useEffect(() => {
-    const handleMouseMove = () => resetControlsTimer();
+    const handleMouseMove = () => {
+      if (settings.readerZenMode !== 'always') {
+        resetControlsTimer();
+      }
+    };
+
+    const handleScroll = () => {
+      if (settings.readerZenMode === 'on_scroll') {
+        setShowControls(false);
+      }
+    };
+
     window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('scroll', handleScroll, true);
     resetControlsTimer();
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('scroll', handleScroll, true);
       if (controlsTimeout.current) clearTimeout(controlsTimeout.current);
     };
-  }, [resetControlsTimer]);
+  }, [resetControlsTimer, settings.readerZenMode]);
 
   // ── Keyboard shortcuts ──────────────────────────────────────────────────
   useEffect(() => {
@@ -235,7 +261,7 @@ const ReaderView = () => {
   }, [showGoToPage]);
 
   // ── Night mode + Brightness filter ─────────────────────────────────────
-  const getCombinedFilter = () => {
+  const combinedFilter = useMemo(() => {
     const filters = [];
     if (pdfNightMode) {
       if (settings.nightModeType === 'sepia') {
@@ -250,7 +276,7 @@ const ReaderView = () => {
       filters.push(`brightness(${brightnessVal}%)`);
     }
     return filters.length > 0 ? filters.join(' ') : 'none';
-  };
+  }, [pdfNightMode, settings.nightModeType, settings.sepiaWarmth, settings.brightness]);
 
   const currentBookmarked = bookPath ? isBookmarked(bookPath, page) : false;
   const bookmarksList = bookPath ? getBookmarks(bookPath) : [];
@@ -259,9 +285,11 @@ const ReaderView = () => {
     <div className={`reader-container ${isFullscreen ? 'fullscreen-active' : ''} ${showControls ? '' : 'controls-hidden'}`}>
 
       {/* ─── Progress Bar (top) ─── */}
-      <div className={`reader-progress-bar ${showControls ? 'visible' : 'hidden'}`}>
-        <div className="reader-progress-fill" style={{ width: `${progressPercent}%` }} />
-      </div>
+      {settings.showBookProgress !== false && (
+        <div className={`reader-progress-bar ${showControls ? 'visible' : 'hidden'}`}>
+          <div className="reader-progress-fill" style={{ width: `${progressPercent}%` }} />
+        </div>
+      )}
 
       {/* ─── TOC Panel ─── */}
       <aside className={`toc-panel ${showToc ? 'open' : ''}`}>
@@ -324,7 +352,7 @@ const ReaderView = () => {
                 showGlow={settings.pageGlow}
                 onPageChange={handlePageChange}
                 onTotalPages={handleTotalPages}
-                filter={getCombinedFilter()}
+                filter={combinedFilter}
               />
             ) : (
               <PdfRenderer
@@ -332,7 +360,7 @@ const ReaderView = () => {
                 scale={scale}
                 pageNumber={page}
                 showGlow={settings.pageGlow}
-                filter={getCombinedFilter()}
+                filter={combinedFilter}
                 onPageLoad={(pdfPage, viewport, numPages) => {
                   if (numPages && bookPath && numPages !== totalPagesMap[bookPath]) {
                     setBookTotalPages(bookPath, numPages);

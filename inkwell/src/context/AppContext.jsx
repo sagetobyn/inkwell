@@ -1,6 +1,10 @@
 import React, { createContext, useState, useContext, useEffect, useCallback, useRef } from 'react';
 import { load } from '@tauri-apps/plugin-store';
 import { open } from '@tauri-apps/plugin-dialog';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { appLocalDataDir, join } from '@tauri-apps/api/path';
+import { convertFileSrc } from '@tauri-apps/api/core';
 
 const AppContext = createContext();
 
@@ -51,10 +55,28 @@ export const AppProvider = ({ children }) => {
     showFileExtensions: true,
     confirmRemoveFolder: true,
     pageGlow: true,
+    showBookCovers: true,
+    showBookProgress: true,
+    showLibraryStats: true,
+    showHeroSection: true,
+    showRecentSection: true,
+    // Premium Settings
+    glassIntensity: 0.7,         // backdrop opacity (0-1)
+    glassBlur: 16,               // backdrop blur (0-40)
+    fontFamily: 'sans',          // sans | serif | mono
+    enable3DEffects: true,
+    libraryGridSize: 1.0,        // multiplier for card sizing
+    readerZenMode: 'off',        // off | on_scroll | always
+    transitionSpeed: 'normal',   // fast | normal | slow
+    startupPage: 'library',      // library | recent | resume
   };
 
   /* ───────── State ───────── */
-  const [currentView, setCurrentView] = useState('library');
+  const [currentView, setCurrentView] = useState(() => {
+    // Check if we are in a settings window
+    const params = new URLSearchParams(window.location.search);
+    return params.get('view') === 'settings' ? 'settings' : 'library';
+  });
   const [currentBook, setCurrentBook] = useState(null);
   const [theme, setTheme] = useState('dark');
   const [pdfNightMode, setPdfNightMode] = useState(false);
@@ -82,11 +104,13 @@ export const AppProvider = ({ children }) => {
   const [totalPagesMap, setTotalPagesMap] = useState({}); // { [bookPath]: number }
   const [thumbnailsMap, setThumbnailsMap] = useState({}); // { [bookPath]: fileName }
   const [thumbnailsBaseDir, setThumbnailsBaseDir] = useState(null);
+  const [readingStats, setReadingStats] = useState({ totalBooksOpened: 0, lastReadDate: null, readDates: [] });
 
   // Debounced save ref
   const saveTimeout = useRef(null);
   const thumbnailQueueRef = useRef([]);
   const isGeneratingThumbnails = useRef(false);
+  const failedThumbnails = useRef(new Set());
 
   const refreshLibrary = () => setSyncTrigger(t => t + 1);
 
@@ -112,31 +136,44 @@ export const AppProvider = ({ children }) => {
       const thumbName = `thumb_${hash}_${cleanName}.jpg`;
       const thumbPath = await join(thumbDir, thumbName);
 
-      // Load PDF data
+      // Read the PDF file directly (most reliable method)
       const fileData = await readFile(bookPath);
-      const loadingTask = pdfjsLib.getDocument({
-        data: fileData,
-        cMapUrl: '/cmaps/',
-        cMapPacked: true,
-        standardFontDataUrl: '/standard_fonts/'
-      });
-      const pdf = await loadingTask.promise;
-      const page = await pdf.getPage(1);
 
-      const viewport = page.getViewport({ scale: 0.5 }); // High quality but small
+      // Wrap pdf.js in a timeout to prevent hanging on corrupt files
+      const pdf = await Promise.race([
+        pdfjsLib.getDocument({ data: fileData }).promise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('PDF load timeout')), 8000))
+      ]);
+
+      const page = await pdf.getPage(1);
+      const viewport = page.getViewport({ scale: 0.3 });
       const canvas = document.createElement('canvas');
       const context = canvas.getContext('2d');
       canvas.height = viewport.height;
       canvas.width = viewport.width;
 
-      await page.render({ canvasContext: context, viewport }).promise;
+      // Fill with white background
+      context.fillStyle = '#ffffff';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+
+      await Promise.race([
+        page.render({ canvasContext: context, viewport }).promise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Render timeout')), 5000))
+      ]);
 
       // Convert to blob
-      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.8));
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.7));
+      if (!blob) throw new Error('Canvas toBlob returned null');
+
       const arrayBuffer = await blob.arrayBuffer();
       const uint8Array = new Uint8Array(arrayBuffer);
 
       await writeFile(thumbPath, uint8Array);
+
+      // Clean up
+      canvas.width = 0;
+      canvas.height = 0;
+      pdf.destroy();
 
       // Update state and persistent store
       setThumbnailsMap(prev => {
@@ -147,36 +184,43 @@ export const AppProvider = ({ children }) => {
 
       return thumbName;
     } catch (err) {
-      console.error("Thumbnail gen failed for", bookPath, err);
+      console.warn("Thumbnail gen failed for", bookPath.split(/[/\\]/).pop(), err.message);
+      failedThumbnails.current.add(bookPath);
       return null;
     }
   };
 
   /* ───────── Background Thumbnail Queue ───────── */
   useEffect(() => {
-    if (isGeneratingThumbnails.current || allBooks.length === 0) return;
+    if (settings.showBookCovers === false || allBooks.length === 0) return;
 
     const processQueue = async () => {
       if (isGeneratingThumbnails.current) return;
 
-      const missing = allBooks.filter(b => !thumbnailsMap[b.path]).map(b => b.path);
+      const missing = allBooks
+        .filter(b => !thumbnailsMap[b.path] && !failedThumbnails.current.has(b.path))
+        .map(b => b.path);
       if (missing.length === 0) return;
 
       isGeneratingThumbnails.current = true;
+      console.log(`[Thumbnails] Generating ${missing.length} covers...`);
 
-      // Process a few at a time to avoid heavy lag
-      for (const path of missing.slice(0, 5)) {
-        await generateThumbnail(path);
-        // Small breathing room for UI
-        await new Promise(r => setTimeout(r, 100));
+      // Process all missing books sequentially
+      for (let i = 0; i < missing.length; i++) {
+        await generateThumbnail(missing[i]);
+        // Brief yield every 3 books to let UI breathe
+        if (i % 3 === 2) {
+          await new Promise(r => setTimeout(r, 50));
+        }
       }
 
       isGeneratingThumbnails.current = false;
+      console.log(`[Thumbnails] Done. Failed: ${failedThumbnails.current.size}`);
     };
 
-    const timer = setTimeout(processQueue, 3000); // Wait for library to settle
+    const timer = setTimeout(processQueue, 2000);
     return () => clearTimeout(timer);
-  }, [allBooks, thumbnailsMap]);
+  }, [allBooks, thumbnailsMap, settings.showBookCovers]);
 
   /* ───────── Apply Theme ───────── */
   useEffect(() => {
@@ -187,13 +231,71 @@ export const AppProvider = ({ children }) => {
     }
   }, [theme]);
 
-  /* ───────── Apply Accent Color ───────── */
+  /* ───────── Apply Styles (Theme, Accent, Glass, Font) ───────── */
   useEffect(() => {
     const root = document.documentElement;
+    // Accent
     root.style.setProperty('--ink-accent-h', settings.accentColor.h);
     root.style.setProperty('--ink-accent-s', `${settings.accentColor.s}%`);
     root.style.setProperty('--ink-accent-l', `${settings.accentColor.l}%`);
-  }, [settings.accentColor]);
+
+    // Glassmorphism
+    root.style.setProperty('--ink-glass-opacity', settings.glassIntensity ?? 0.7);
+    root.style.setProperty('--ink-glass-blur', `${settings.glassBlur ?? 16}px`);
+
+    // Typography
+    const fontMap = {
+      sans: 'var(--font-sans)',
+      serif: 'Lora, "Georgia", serif',
+      mono: 'var(--font-mono)'
+    };
+    root.style.setProperty('--ink-font-family', fontMap[settings.fontFamily] || 'var(--font-sans)');
+
+    // Reader & Transitions
+    const speedMap = { fast: '120ms', normal: '250ms', slow: '450ms' };
+    root.style.setProperty('--ink-transition-duration', speedMap[settings.transitionSpeed] || '250ms');
+
+    // Grid Size
+    root.style.setProperty('--ink-grid-scale', settings.libraryGridSize ?? 1.0);
+  }, [settings.accentColor, settings.glassIntensity, settings.glassBlur, settings.fontFamily, settings.transitionSpeed, settings.libraryGridSize]);
+
+  /* ───────── Cross-Window Sync ───────── */
+  useEffect(() => {
+    let unlistenSettings;
+    let unlistenTheme;
+    let unlistenAccent;
+
+    const setupListeners = async () => {
+      try {
+        const store = await load('library.json', { autoSave: false });
+        
+        // Settings Sync
+        unlistenSettings = await store.onKeyChange('settings', (val) => {
+          if (val) setSettings(prev => ({ ...prev, ...val }));
+        });
+
+        // Theme Sync
+        unlistenTheme = await store.onKeyChange('theme', (val) => {
+          if (val) setTheme(val);
+        });
+
+        // Shortcuts Sync
+        const unlistenShortcuts = await store.onKeyChange('shortcuts', (val) => {
+          if (val) setShortcuts(prev => ({ ...prev, ...val }));
+        });
+
+        return () => {
+          if (unlistenSettings) unlistenSettings();
+          if (unlistenTheme) unlistenTheme();
+          if (unlistenShortcuts) unlistenShortcuts();
+        };
+      } catch (err) {
+        console.error("Store listener setup failed", err);
+      }
+    };
+
+    setupListeners();
+  }, []);
 
   /* ───────── Debounced Store Save ───────── */
   const debouncedSave = useCallback(async (key, value) => {
@@ -219,68 +321,81 @@ export const AppProvider = ({ children }) => {
     }
   }, []);
 
-  /* ───────── Load from Store ───────── */
+  /* ───────── Load from Store (Parallelized) ───────── */
   useEffect(() => {
     const initStore = async () => {
+      const startTime = performance.now();
+      console.log("[Init] Starting store initialization...");
+      
       try {
         const store = await load('library.json', { autoSave: false });
+        
+        // Define all keys we need to fetch
+        const keys = [
+          'categories', 'importedBooks', 'allBooks', 'bookProgress',
+          'shortcuts', 'pdfNightMode', 'theme', 'settings',
+          'recentBooks', 'favoriteBookIds', 'bookmarks', 'annotations',
+          'viewMode', 'sortOrder', 'readingStats', 'totalPagesMap', 'thumbnailsMap'
+        ];
 
-        const savedCategories = await store.get('categories') || [];
-        if (Array.isArray(savedCategories)) {
-          setCategories([{ id: 'all', name: 'All Books', path: null }, ...savedCategories]);
+        // Fetch all in parallel
+        const results = await Promise.all(keys.map(key => store.get(key)));
+        
+        // Map results back to variables
+        const [
+          s_categories, s_imported, s_allBooks, s_progress,
+          s_shortcuts, s_pdfMode, s_theme, s_settings,
+          s_recent, s_favorites, s_bookmarks, s_annotations,
+          s_viewMode, s_sortOrder, s_readingStats, s_totalPages, s_thumbnails
+        ] = results;
+
+        console.log(`[Init] Data fetched in ${Math.round(performance.now() - startTime)}ms`);
+
+        // Batch state updates (React 18+ handles this well)
+        if (Array.isArray(s_categories)) {
+          setCategories([{ id: 'all', name: 'All Books', path: null }, ...s_categories]);
         }
+        if (Array.isArray(s_imported)) setImportedBooks(s_imported);
+        if (Array.isArray(s_allBooks)) setAllBooks(s_allBooks);
+        if (s_progress) setBookProgress(s_progress);
+        if (s_shortcuts) setShortcuts({ ...defaultShortcuts, ...s_shortcuts });
+        if (s_pdfMode !== null && s_pdfMode !== undefined) setPdfNightMode(s_pdfMode);
+        if (s_theme) setTheme(s_theme);
+        if (s_settings) setSettings(prev => ({ ...prev, ...s_settings }));
+        if (Array.isArray(s_recent)) setRecentBooks(s_recent);
+        if (Array.isArray(s_favorites)) setFavoriteBookIds(s_favorites);
+        if (s_bookmarks) setBookmarks(s_bookmarks);
+        if (s_annotations) setAnnotations(s_annotations);
+        if (s_viewMode) setViewMode(s_viewMode);
+        if (s_sortOrder) setSortOrder(s_sortOrder);
+        if (s_readingStats) setReadingStats(prev => ({ ...prev, ...s_readingStats }));
+        if (s_totalPages) setTotalPagesMap(s_totalPages);
+        if (s_thumbnails) setThumbnailsMap(s_thumbnails);
 
-        const savedImported = await store.get('importedBooks') || [];
-        if (Array.isArray(savedImported)) setImportedBooks(savedImported);
-
-        const savedAllBooks = await store.get('allBooks') || [];
-        if (Array.isArray(savedAllBooks)) setAllBooks(savedAllBooks);
-
-        const savedProgress = await store.get('bookProgress') || {};
-        setBookProgress(savedProgress);
-
-        const savedShortcuts = await store.get('shortcuts');
-        if (savedShortcuts) setShortcuts({ ...defaultShortcuts, ...savedShortcuts });
-
-        const savedPdfMode = await store.get('pdfNightMode');
-        if (savedPdfMode !== null && savedPdfMode !== undefined) setPdfNightMode(savedPdfMode);
-
-        const savedTheme = await store.get('theme');
-        if (savedTheme) setTheme(savedTheme);
-
-        const savedSettings = await store.get('settings');
-        if (savedSettings) setSettings(prev => ({ ...prev, ...savedSettings }));
-
-        const savedRecent = await store.get('recentBooks') || [];
-        if (Array.isArray(savedRecent)) setRecentBooks(savedRecent);
-
-        const savedFavorites = await store.get('favoriteBookIds') || [];
-        if (Array.isArray(savedFavorites)) setFavoriteBookIds(savedFavorites);
-
-        const savedBookmarks = await store.get('bookmarks') || {};
-        setBookmarks(savedBookmarks);
-
-        const savedAnnotations = await store.get('annotations') || {};
-        setAnnotations(savedAnnotations);
-
-        const savedViewMode = await store.get('viewMode');
-        if (savedViewMode) setViewMode(savedViewMode);
-
-        const savedSortOrder = await store.get('sortOrder');
-        if (savedSortOrder) setSortOrder(savedSortOrder);
-
-        const savedTotalPages = await store.get('totalPagesMap') || {};
-        setTotalPagesMap(savedTotalPages);
-
-        const savedThumbnails = await store.get('thumbnailsMap') || {};
-        setThumbnailsMap(savedThumbnails);
-
-        const { appLocalDataDir, join } = await import('@tauri-apps/api/path');
         const dataDir = await appLocalDataDir();
         const thumbDir = await join(dataDir, 'thumbnails');
         setThumbnailsBaseDir(thumbDir);
+
+        console.log(`[Init] All state ready in ${Math.round(performance.now() - startTime)}ms.`);
+
       } catch (err) {
-        console.error("Failed to load library store", err);
+        console.error("[Init] Failed to load library store", err);
+      } finally {
+        // Show window and hide splash
+        try {
+          const win = getCurrentWindow();
+          await win.show();
+          
+          // Small delay to ensure React has rendered before removing splash
+          setTimeout(() => {
+            const splash = document.getElementById('splash');
+            if (splash) splash.classList.add('splash-hidden');
+          }, 100);
+          
+          console.log(`[Init] App ready and visible at ${Math.round(performance.now() - startTime)}ms`);
+        } catch(e) {
+          console.error("[Init] Failed to show window or hide splash", e);
+        }
       }
     };
     initStore();
@@ -456,6 +571,31 @@ export const AppProvider = ({ children }) => {
     setCurrentView('library');
   };
 
+  const openSettingsWindow = async () => {
+    try {
+      const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+      const win = WebviewWindow.getByLabel('settings');
+      if (win) {
+        await win.setFocus();
+      } else {
+        new WebviewWindow('settings', {
+          url: 'index.html?view=settings',
+          title: 'Settings — InkWell',
+          width: 850,
+          height: 700,
+          resizable: true,
+          minimizable: true,
+          maximizable: true,
+          decorations: true,
+          center: true,
+        });
+      }
+    } catch (e) {
+      console.error("Failed to open settings window", e);
+      setCurrentView('settings');
+    }
+  };
+
   const updateBookProgress = async (path, page) => {
     const newProgress = { ...bookProgress, [path]: { page } };
     setBookProgress(newProgress);
@@ -489,6 +629,20 @@ export const AppProvider = ({ children }) => {
     const updated = [book, ...recentBooks.filter(b => b.path !== book.path)].slice(0, 10);
     setRecentBooks(updated);
     debouncedSave('recentBooks', updated);
+
+    // Update reading stats
+    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    setReadingStats(prev => {
+      const dates = prev.readDates || [];
+      const updatedDates = dates.includes(today) ? dates : [...dates, today].slice(-90); // Keep 90 days
+      const newStats = {
+        totalBooksOpened: (prev.totalBooksOpened || 0) + 1,
+        lastReadDate: today,
+        readDates: updatedDates,
+      };
+      debouncedSave('readingStats', newStats);
+      return newStats;
+    });
   };
 
   const toggleFavorite = async (bookPath) => {
@@ -542,6 +696,41 @@ export const AppProvider = ({ children }) => {
     setImportedBooks(updated);
     await immediateStoreSave('importedBooks', updated);
   };
+  
+  const clearThumbnailCache = async () => {
+    try {
+      const { removeDir, mkdir } = await import('@tauri-apps/plugin-fs');
+      if (thumbnailsBaseDir) {
+        await removeDir(thumbnailsBaseDir, { recursive: true });
+        await mkdir(thumbnailsBaseDir, { recursive: true });
+        setThumbnailsMap({});
+        await immediateStoreSave('thumbnailsMap', {});
+        return true;
+      }
+    } catch (err) {
+      console.error("Failed to clear thumbnail cache:", err);
+      throw err;
+    }
+  };
+
+  const getThumbnailUrl = useCallback(async (fileName) => {
+    if (!fileName || !thumbnailsBaseDir) return null;
+    try {
+      const { join } = await import('@tauri-apps/api/path');
+      const { convertFileSrc } = await import('@tauri-apps/api/core');
+      const fullPath = await join(thumbnailsBaseDir, fileName);
+      const url = convertFileSrc(fullPath);
+      // Only log once per session or for specific debug needs
+      if (!window.__THUMB_LOGGED__) {
+        console.log(`[Thumbnails] Sample resolved URL:`, url);
+        window.__THUMB_LOGGED__ = true;
+      }
+      return url;
+    } catch (err) {
+      console.error("Error creating thumbnail URL:", err);
+      return null;
+    }
+  }, [thumbnailsBaseDir]);
 
   /* ───────── Filter books by category ───────── */
   const booksByCategory = React.useMemo(() => {
@@ -591,12 +780,77 @@ export const AppProvider = ({ children }) => {
     return sortedBooks.filter(b => b.name.toLowerCase().includes(q));
   }, [sortedBooks, searchQuery]);
 
+  /* ───────── Continue Reading Book ───────── */
+  const continueReadingBook = React.useMemo(() => {
+    if (recentBooks.length === 0) return null;
+    // Find the most recent book that has progress but isn't 100% done
+    for (const book of recentBooks) {
+      const prog = bookProgress[book.path];
+      const total = totalPagesMap[book.path];
+      if (prog && total && total > 0) {
+        const pct = Math.round((prog.page / total) * 100);
+        if (pct > 0 && pct < 100) return book;
+      }
+    }
+    // If no in-progress book, just return the most recent
+    return recentBooks[0];
+  }, [recentBooks, bookProgress, totalPagesMap]);
+
+  /* ───────── Reading Stats (computed) ───────── */
+  const computedStats = React.useMemo(() => {
+    // Calculate streak (consecutive days with reading)
+    const dates = readingStats.readDates || [];
+    let streak = 0;
+    if (dates.length > 0) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      let checkDate = new Date(today);
+
+      // Check if user read today or yesterday
+      const todayStr = today.toISOString().slice(0, 10);
+      const yesterdayDate = new Date(today);
+      yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+      const yesterdayStr = yesterdayDate.toISOString().slice(0, 10);
+
+      if (!dates.includes(todayStr) && !dates.includes(yesterdayStr)) {
+        streak = 0;
+      } else {
+        if (!dates.includes(todayStr)) {
+          checkDate = yesterdayDate;
+        }
+        while (true) {
+          const ds = checkDate.toISOString().slice(0, 10);
+          if (dates.includes(ds)) {
+            streak++;
+            checkDate.setDate(checkDate.getDate() - 1);
+          } else {
+            break;
+          }
+        }
+      }
+    }
+
+    // Total pages read across all books
+    let totalPagesRead = 0;
+    Object.entries(bookProgress).forEach(([path, prog]) => {
+      if (prog && prog.page) totalPagesRead += prog.page;
+    });
+
+    return {
+      totalBooksOpened: readingStats.totalBooksOpened || 0,
+      readingStreak: streak,
+      totalPagesRead,
+      booksInLibrary: (allBooks.length + importedBooks.length),
+    };
+  }, [readingStats, bookProgress, allBooks.length, importedBooks.length]);
+
   /* ───────── Context value ───────── */
   const value = {
     // View
     currentView, setCurrentView,
     currentBook, setCurrentBook,
     openBook, closeBook,
+    openSettingsWindow,
 
     // Theme
     theme, setTheme: updateTheme,
@@ -626,14 +880,11 @@ export const AppProvider = ({ children }) => {
     totalPagesMap, setBookTotalPages,
     thumbnailsMap,
     removeImportedBook,
-    getThumbnailUrl: (fileName) => {
-      if (!fileName || !thumbnailsBaseDir) return null;
-      // In a real implementation, we'd use join and convertFileSrc here
-      // but for this simplified version, let's assume the UI can handle the construction
-      // if we provide the base dir.
-      return null;
-    },
-    thumbnailsBaseDir
+    getThumbnailUrl,
+    thumbnailsBaseDir,
+    continueReadingBook,
+    computedStats,
+    clearThumbnailCache
   };
 
   return (

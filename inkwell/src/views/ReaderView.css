@@ -22,7 +22,7 @@
   height: 2px;
   background: var(--ink-border);
   z-index: var(--z-sticky);
-  transition: opacity var(--duration-slow) var(--ease-out);
+  transition: opacity var(--ink-transition-duration) var(--ease-out);
 }
 
 .reader-progress-bar.hidden {
@@ -54,7 +54,7 @@
   border-right: 1px solid var(--ink-border);
   z-index: var(--z-overlay);
   transform: translateX(-100%);
-  transition: transform var(--duration-slow) var(--ease-out);
+  transition: transform var(--ink-transition-duration) var(--ease-out);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -157,7 +157,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  transition: filter var(--duration-slow) var(--ease-out);
+  transition: filter var(--ink-transition-duration) var(--ease-out);
 }
 
 /* ========================================================================
@@ -249,7 +249,7 @@
    ======================================================================== */
 .reader-controls {
   pointer-events: none;
-  transition: opacity var(--duration-slow) var(--ease-out);
+  transition: opacity var(--ink-transition-duration) var(--ease-out);
 }
 
 .reader-controls.visible {

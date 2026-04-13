@@ -13,6 +13,7 @@ const TABS = [
   { id: 'reader', label: 'Reader', icon: <BookOpen size={16} /> },
   { id: 'library', label: 'Library', icon: <Eye size={16} /> },
   { id: 'shortcuts', label: 'Shortcuts', icon: <Keyboard size={16} /> },
+  { id: 'advanced', label: 'Advanced', icon: <Monitor size={16} /> },
   { id: 'about', label: 'About', icon: <Info size={16} /> },
 ];
 
@@ -37,9 +38,13 @@ const SettingRow = ({ label, description, children }) => (
 
 const SettingsView = () => {
   const {
-    setCurrentView, theme, setTheme, shortcuts, updateShortcuts,
-    settings, updateSettings, addCategory, categories, removeCategory
+    settings, updateSettings, addCategory, categories, removeCategory,
+    clearThumbnailCache
   } = useAppContext();
+
+  const isSettingsWindow = React.useMemo(() => {
+    return new URLSearchParams(window.location.search).get('view') === 'settings';
+  }, []);
 
   const addToast = useToast();
   const [activeTab, setActiveTab] = useState('appearance');
@@ -136,8 +141,15 @@ const SettingsView = () => {
       {/* Header */}
       <header className="settings-header">
         <div className="settings-header-left">
-          <Tooltip content="Back to Library">
-            <button className="icon-btn" onClick={() => setCurrentView('library')}>
+          <Tooltip content={isSettingsWindow ? "Close" : "Back to Library"}>
+            <button className="icon-btn" onClick={async () => {
+              if (isSettingsWindow) {
+                const { getCurrentWindow } = await import('@tauri-apps/api/window');
+                getCurrentWindow().close();
+              } else {
+                setCurrentView('library');
+              }
+            }}>
               <ArrowLeft size={18} />
             </button>
           </Tooltip>
@@ -220,6 +232,62 @@ const SettingsView = () => {
                     {['none', 'dots', 'grid'].map(p => (
                       <button key={p} className={`theme-btn ${settings.bgPattern === p ? 'active' : ''}`} onClick={() => updateSettings({ bgPattern: p })}>
                         {p.charAt(0).toUpperCase() + p.slice(1)}
+                      </button>
+                    ))}
+                  </div>
+                </SettingRow>
+
+                <SettingRow label="Gradient Mesh" description="Animated background effect in the library.">
+                  <Toggle checked={settings.gradientMesh !== false} onChange={v => updateSettings({ gradientMesh: v })} />
+                </SettingRow>
+
+                <hr className="divider" />
+                <div className="section-subtitle">Glassmorphism</div>
+
+                <SettingRow label="Backdrop Opacity" description={`${Math.round((settings.glassIntensity ?? 0.7) * 100)}%`}>
+                  <div className="slider-container">
+                    <input
+                      type="range"
+                      className="slider-track"
+                      min={0}
+                      max={100}
+                      value={Math.round((settings.glassIntensity ?? 0.7) * 100)}
+                      onChange={e => updateSettings({ glassIntensity: parseInt(e.target.value, 10) / 100 })}
+                    />
+                    <span className="slider-value mono">{Math.round((settings.glassIntensity ?? 0.7) * 100)}%</span>
+                  </div>
+                </SettingRow>
+
+                <SettingRow label="Backdrop Blur" description={`${settings.glassBlur ?? 16}px`}>
+                  <div className="slider-container">
+                    <input
+                      type="range"
+                      className="slider-track"
+                      min={0}
+                      max={40}
+                      value={settings.glassBlur ?? 16}
+                      onChange={e => updateSettings({ glassBlur: parseInt(e.target.value, 10) })}
+                    />
+                    <span className="slider-value mono">{settings.glassBlur ?? 16}px</span>
+                  </div>
+                </SettingRow>
+
+                <hr className="divider" />
+                <div className="section-subtitle">Typography</div>
+
+                <SettingRow label="App Font Family" description="Choose the typeface for the entire application.">
+                  <div className="theme-toggle-group">
+                    {[
+                      { id: 'sans', label: 'Sans' },
+                      { id: 'serif', label: 'Serif' },
+                      { id: 'mono', label: 'Mono' }
+                    ].map(f => (
+                      <button 
+                        key={f.id} 
+                        className={`theme-btn ${settings.fontFamily === f.id ? 'active' : ''}`} 
+                        onClick={() => updateSettings({ fontFamily: f.id })}
+                      >
+                        {f.label}
                       </button>
                     ))}
                   </div>
@@ -331,6 +399,38 @@ const SettingsView = () => {
                 <SettingRow label="Infinite Scroll" description="Scroll continuously through all pages instead of one page at a time.">
                   <Toggle checked={settings.infiniteScroll === true} onChange={v => updateSettings({ infiniteScroll: v })} />
                 </SettingRow>
+
+                <SettingRow label="Zen Mode" description="Automatically hide all UI during focused reading.">
+                  <div className="theme-toggle-group">
+                    {[
+                      { id: 'off', label: 'Off' },
+                      { id: 'on_scroll', label: 'On Scroll' },
+                      { id: 'always', label: 'Always' }
+                    ].map(m => (
+                      <button 
+                        key={m.id} 
+                        className={`theme-btn ${settings.readerZenMode === m.id ? 'active' : ''}`} 
+                        onClick={() => updateSettings({ readerZenMode: m.id })}
+                      >
+                        {m.label}
+                      </button>
+                    ))}
+                  </div>
+                </SettingRow>
+
+                <SettingRow label="Transition Speed" description="Adjust the speed of page turns and UI animations.">
+                  <div className="theme-toggle-group">
+                    {['fast', 'normal', 'slow'].map(s => (
+                      <button 
+                        key={s} 
+                        className={`theme-btn ${settings.transitionSpeed === s ? 'active' : ''}`} 
+                        onClick={() => updateSettings({ transitionSpeed: s })}
+                      >
+                        {s.charAt(0).toUpperCase() + s.slice(1)}
+                      </button>
+                    ))}
+                  </div>
+                </SettingRow>
               </div>
             )}
 
@@ -375,12 +475,50 @@ const SettingsView = () => {
 
                 <hr className="divider" style={{ margin: 'var(--space-6) 0' }} />
 
+                <SettingRow label="Show Book Covers" description="Render first page of PDF as cover (can affect performance).">
+                  <Toggle checked={settings.showBookCovers !== false} onChange={v => updateSettings({ showBookCovers: v })} />
+                </SettingRow>
+
+                <SettingRow label="Show Reading Progress" description="Display progress bars and rings for your books.">
+                  <Toggle checked={settings.showBookProgress !== false} onChange={v => updateSettings({ showBookProgress: v })} />
+                </SettingRow>
+
+                <SettingRow label="Show 'Continue Reading' Hero" description="Display the large hero section for your most recent book.">
+                  <Toggle checked={settings.showHeroSection !== false} onChange={v => updateSettings({ showHeroSection: v })} />
+                </SettingRow>
+
+                <SettingRow label="Show 'Recently Opened' Section" description="Display the horizontal scroll of recently accessed books.">
+                  <Toggle checked={settings.showRecentSection !== false} onChange={v => updateSettings({ showRecentSection: v })} />
+                </SettingRow>
+
+                <SettingRow label="Show Reading Stats" description="Display reading statistics in the library dashboard.">
+                  <Toggle checked={settings.showLibraryStats !== false} onChange={v => updateSettings({ showLibraryStats: v })} />
+                </SettingRow>
+
                 <SettingRow label="Show File Extensions" description="Display .pdf extension in book titles.">
                   <Toggle checked={settings.showFileExtensions !== false} onChange={v => updateSettings({ showFileExtensions: v })} />
                 </SettingRow>
 
                 <SettingRow label="Confirm Folder Removal" description="Ask before removing a mapped folder.">
                   <Toggle checked={settings.confirmRemoveFolder !== false} onChange={v => updateSettings({ confirmRemoveFolder: v })} />
+                </SettingRow>
+
+                <SettingRow label="3D Motion Effects" description="Enable immersive 3D tilt effects on book covers.">
+                  <Toggle checked={settings.enable3DEffects !== false} onChange={v => updateSettings({ enable3DEffects: v })} />
+                </SettingRow>
+
+                <SettingRow label="Grid Card Size" description={`${Math.round((settings.libraryGridSize ?? 1.0) * 100)}%`}>
+                  <div className="slider-container">
+                    <input
+                      type="range"
+                      className="slider-track"
+                      min={70}
+                      max={150}
+                      value={Math.round((settings.libraryGridSize ?? 1.0) * 100)}
+                      onChange={e => updateSettings({ libraryGridSize: parseInt(e.target.value, 10) / 100 })}
+                    />
+                    <span className="slider-value mono">{Math.round((settings.libraryGridSize ?? 1.0) * 100)}%</span>
+                  </div>
                 </SettingRow>
               </div>
             )}
@@ -425,6 +563,64 @@ const SettingsView = () => {
               </div>
             )}
 
+            {/* ─── Advanced ─── */}
+            {activeTab === 'advanced' && (
+              <div className="settings-section animate-fade-in">
+                <div className="section-heading">
+                  <div className="section-icon" style={{ background: 'var(--ink-text-secondary)' }}>
+                    <Monitor size={20} color="white" />
+                  </div>
+                  <div>
+                    <h2>Advanced</h2>
+                    <p>Power user settings and maintenance.</p>
+                  </div>
+                </div>
+                <hr className="divider" />
+
+                <SettingRow label="Startup Page" description="Which page to show when InkWell opens.">
+                  <div className="theme-toggle-group">
+                    {[
+                      { id: 'library', label: 'Library' },
+                      { id: 'recent', label: 'Recent' },
+                      { id: 'resume', label: 'Resume Last' }
+                    ].map(p => (
+                      <button 
+                        key={p.id} 
+                        className={`theme-btn ${settings.startupPage === p.id ? 'active' : ''}`} 
+                        onClick={() => updateSettings({ startupPage: p.id })}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+                </SettingRow>
+
+                <hr className="divider" />
+                <div className="section-subtitle">Maintenance</div>
+
+                <div className="danger-zone">
+                  <div className="danger-zone-item">
+                    <div className="danger-zone-info">
+                      <h4 className="danger-zone-label">Clear Thumbnail Cache</h4>
+                      <p className="danger-zone-desc">Deletes all generated book covers. They will be recreated on next visit.</p>
+                    </div>
+                    <button 
+                      className="btn-surface" 
+                      onClick={async () => {
+                        if (window.confirm('Are you sure? This will delete all generated thumbnails.')) {
+                          await clearThumbnailCache();
+                          addToast('Thumbnail cache cleared', 'success');
+                        }
+                      }}
+                      style={{ color: 'var(--ink-danger)' }}
+                    >
+                      Clear Cache
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* ─── About ─── */}
             {activeTab === 'about' && (
               <div className="settings-section animate-fade-in">
@@ -441,8 +637,10 @@ const SettingsView = () => {
 
                 <div className="about-description">
                   <p>
-                    InkWell is a premium, offline-first PDF reader crafted for deep reading.
-                    Built with Tauri, React, and PDF.js.
+                    InkWell is a state-of-the-art, offline-first PDF reader designed specifically for thinkers, writers, and deep readers.
+                  </p>
+                  <p style={{ marginTop: 'var(--space-3)', color: 'var(--ink-text-tertiary)', fontSize: 'var(--font-xs)' }}>
+                    Built with technical precision using Tauri, React, and PDF.js. Optimized for performance and private, focused reading.
                   </p>
                 </div>
 

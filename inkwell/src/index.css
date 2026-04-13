@@ -2,6 +2,7 @@
 @import '@fontsource/inter/500.css';
 @import '@fontsource/inter/600.css';
 @import '@fontsource/inter/700.css';
+@import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400&display=swap');
 
 /* ========================================================================
    InkWell Design System — Obsidian-Grade Token Foundation
@@ -17,53 +18,57 @@
   --ink-primary-muted: hsla(var(--ink-accent-h), var(--ink-accent-s), var(--ink-accent-l), 0.15);
   --ink-primary-glow: hsla(var(--ink-accent-h), var(--ink-accent-s), var(--ink-accent-l), 0.35);
 
-  /* ── Dark theme surfaces (layered depth like Obsidian) ── */
-  --ink-bg: #0e1015;
-  --ink-bg-secondary: #12151c;
-  --ink-surface-0: #161922;
-  --ink-surface: #1a1e2a;
-  --ink-surface-2: #222738;
-  --ink-surface-3: #2a3045;
-  --ink-surface-hover: #2e3450;
-  --ink-surface-active: #353c58;
+  /* ── Dark theme surfaces (Obsidian-Grade Deep Grays) ── */
+  --ink-bg: #0f0f0f;
+  --ink-bg-secondary: #141414;
+  --ink-surface-0: #1a1a1a;
+  --ink-surface: #242424;
+  --ink-surface-2: #2e2e2e;
+  --ink-surface-3: #363636;
+  --ink-surface-hover: #3d3d3d;
+  --ink-surface-active: #474747;
 
-  /* ── Borders ── */
-  --ink-border: rgba(255, 255, 255, 0.07);
-  --ink-border-strong: rgba(255, 255, 255, 0.12);
-  --ink-border-accent: hsla(var(--ink-accent-h), var(--ink-accent-s), var(--ink-accent-l), 0.3);
+  /* ── Borders (Subtle but sharp) ── */
+  --ink-border: rgba(255, 255, 255, 0.05);
+  --ink-border-strong: rgba(255, 255, 255, 0.1);
+  --ink-border-accent: hsla(var(--ink-accent-h), var(--ink-accent-s), var(--ink-accent-l), 0.2);
 
-  /* ── Text hierarchy ── */
-  --ink-text-primary: #e8ecf4;
-  --ink-text-secondary: #8892a8;
-  --ink-text-tertiary: #5c6478;
+  /* ── Text hierarchy (Increased contrast) ── */
+  --ink-text-primary: #f5f5f5;
+  --ink-text-secondary: #a3a3a3;
+  --ink-text-tertiary: #737373;
   --ink-text-on-accent: #ffffff;
 
+  /* ── Book Depth Tokens ── */
+  --ink-spine-highlight: rgba(255, 255, 255, 0.08);
+  --ink-spine-shadow: rgba(0, 0, 0, 0.3);
+  --ink-book-radius: 4px 12px 12px 4px; /* Spine side is sharper */
+  --ink-book-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -1px rgba(0, 0, 0, 0.1), 0 10px 15px -3px rgba(0, 0, 0, 0.2);
+  --ink-book-shadow-hover: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.2);
+
   /* ── Semantic colors ── */
-  --ink-success: #34d399;
-  --ink-warning: #fbbf24;
-  --ink-danger: #f87171;
-  --ink-info: #60a5fa;
+  --ink-success: #10b981;
+  --ink-warning: #f59e0b;
+  --ink-danger: #ef4444;
+  --ink-info: #3b82f6;
 
-  /* ── Teal accent (secondary) ── */
-  --ink-accent-teal: #14b8a6;
-
-  /* ── Typography ── */
+  /* ── Typography (Refined scale) ── */
   --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
 
-  --font-2xs: 0.65rem;
+  --font-2xs: 0.7rem;
   --font-xs: 0.75rem;
-  --font-sm: 0.8125rem;
-  --font-base: 0.875rem;
-  --font-md: 0.9375rem;
-  --font-lg: 1.0625rem;
-  --font-xl: 1.25rem;
-  --font-2xl: 1.5rem;
-  --font-3xl: 2rem;
+  --font-sm: 0.85rem;
+  --font-base: 0.925rem;
+  --font-md: 1rem;
+  --font-lg: 1.125rem;
+  --font-xl: 1.35rem;
+  --font-2xl: 1.75rem;
+  --font-3xl: 2.25rem;
 
-  --leading-tight: 1.25;
+  --leading-tight: 1.2;
   --leading-normal: 1.5;
-  --leading-relaxed: 1.65;
+  --leading-relaxed: 1.625;
 
   /* ── Spacing scale ── */
   --space-0: 0;
@@ -72,67 +77,45 @@
   --space-3: 0.75rem;
   --space-4: 1rem;
   --space-5: 1.25rem;
-  --space-6: 1.5rem;
-  --space-8: 2rem;
-  --space-10: 2.5rem;
-  --space-12: 3rem;
-  --space-16: 4rem;
+  --space-6: 1.75rem;
+  --space-8: 2.5rem;
+  --space-10: 3rem;
+  --space-12: 4rem;
+  --space-16: 6rem;
 
   /* ── Radii ── */
-  --radius-xs: 4px;
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --radius-xl: 20px;
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 16px;
   --radius-full: 9999px;
 
-  /* ── Shadows (5-level depth system) ── */
-  --shadow-1: 0 1px 2px rgba(0,0,0,0.3);
-  --shadow-2: 0 2px 6px rgba(0,0,0,0.35), 0 1px 2px rgba(0,0,0,0.25);
-  --shadow-3: 0 4px 12px rgba(0,0,0,0.4), 0 2px 4px rgba(0,0,0,0.25);
-  --shadow-4: 0 8px 24px rgba(0,0,0,0.45), 0 4px 8px rgba(0,0,0,0.25);
-  --shadow-5: 0 16px 48px rgba(0,0,0,0.5), 0 8px 16px rgba(0,0,0,0.3);
-  --shadow-glass: 0 4px 30px rgba(0,0,0,0.4);
-  --shadow-glow: 0 0 20px var(--ink-primary-glow);
-
-  /* ── Glass effects ── */
-  --glass-subtle: rgba(22, 25, 34, 0.5);
-  --glass-medium: rgba(22, 25, 34, 0.7);
-  --glass-strong: rgba(22, 25, 34, 0.85);
-  --glass-blur-sm: 8px;
-  --glass-blur-md: 16px;
-  --glass-blur-lg: 24px;
-
-  /* ── Transitions ── */
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-in-out: cubic-bezier(0.45, 0, 0.55, 1);
-  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-  --ease-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
-
-  --duration-fast: 120ms;
-  --duration-normal: 200ms;
-  --duration-slow: 350ms;
-  --duration-slower: 500ms;
+  /* ── Transitions (Snappier for professionalism) ── */
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  
+  --duration-fast: 150ms;
+  --duration-normal: 250ms;
+  --duration-slow: 400ms;
 
   --transition-fast: var(--duration-fast) var(--ease-out);
   --transition-normal: var(--duration-normal) var(--ease-out);
   --transition-slow: var(--duration-slow) var(--ease-out);
 
-  /* ── Z-index scale ── */
-  --z-base: 0;
-  --z-dropdown: 100;
-  --z-sticky: 200;
-  --z-overlay: 300;
-  --z-modal: 400;
-  --z-toast: 500;
-  --z-tooltip: 600;
-
-  /* ── Sidebar & layout ── */
+  /* ── Layout ── */
   --activity-bar-width: 48px;
-  --sidebar-width: 260px;
-  --sidebar-collapsed-width: 0px;
-  --header-height: 52px;
-  --status-bar-height: 28px;
+  --sidebar-width: 240px;
+  --header-height: 48px;
+  --status-bar-height: 24px;
+
+  /* ── Premium Settings (controlled by JS) ── */
+  --ink-font-family: var(--font-sans);
+  --ink-glass-opacity: 0.7;
+  --ink-glass-blur: 16px;
+  --ink-transition-duration: 250ms;
+  --ink-grid-scale: 1.0;
 }
 
 /* ========================================================================
@@ -177,7 +160,7 @@
 }
 
 body {
-  font-family: var(--font-sans);
+  font-family: var(--ink-font-family);
   font-size: var(--font-base);
   background-color: var(--ink-bg);
   color: var(--ink-text-primary);
@@ -187,6 +170,7 @@ body {
   overflow: hidden;
   user-select: none;
   text-rendering: optimizeLegibility;
+  transition: background var(--ink-transition-duration) ease;
 }
 
 ::selection {
@@ -222,9 +206,9 @@ body {
    Glass Panel Utility
    ======================================================================== */
 .glass-panel {
-  background: var(--glass-medium);
-  backdrop-filter: blur(var(--glass-blur-md));
-  -webkit-backdrop-filter: blur(var(--glass-blur-md));
+  background: hsla(var(--ink-accent-h), var(--ink-accent-s), 5%, var(--ink-glass-opacity));
+  backdrop-filter: blur(var(--ink-glass-blur));
+  -webkit-backdrop-filter: blur(var(--ink-glass-blur));
   border: 1px solid var(--ink-border);
   box-shadow: var(--shadow-glass);
 }
@@ -243,8 +227,8 @@ button {
   all: unset;
   cursor: pointer;
   box-sizing: border-box;
-  transition: all var(--transition-fast);
-  font-family: var(--font-sans);
+  transition: all var(--ink-transition-duration) var(--ease-out);
+  font-family: inherit;
 }
 
 button:focus-visible {
@@ -501,4 +485,184 @@ button:disabled {
 
 .pdf-canvas {
   background: transparent;
+}
+
+/* ========================================================================
+   Premium Keyframes — Homepage Redesign
+   ======================================================================== */
+@keyframes gradientShift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes progressRingDraw {
+  from { stroke-dashoffset: var(--ring-circumference, 283); }
+  to   { stroke-dashoffset: var(--ring-offset, 0); }
+}
+
+@keyframes borderGlow {
+  0%, 100% { border-color: hsla(var(--ink-accent-h), var(--ink-accent-s), var(--ink-accent-l), 0.3); }
+  50%      { border-color: hsla(var(--ink-accent-h), var(--ink-accent-s), var(--ink-accent-l), 0.6); }
+}
+
+@keyframes inkDrop {
+  0%   { transform: scale(0); opacity: 0; }
+  50%  { transform: scale(1.15); opacity: 0.8; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes countUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shineSlide {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+
+@keyframes breathe {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.03); }
+}
+
+@keyframes staggerIn {
+  from { opacity: 0; transform: translateY(16px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ========================================================================
+   Glass Card Utility — Enhanced Glassmorphism
+   ======================================================================== */
+.glass-card {
+  background: hsla(var(--ink-accent-h), var(--ink-accent-s), 5%, var(--ink-glass-opacity));
+  backdrop-filter: blur(var(--ink-glass-blur));
+  -webkit-backdrop-filter: blur(var(--ink-glass-blur));
+  border: 1px solid var(--ink-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-glass), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transition: all var(--ink-transition-duration) var(--ease-out);
+}
+
+.glass-card:hover {
+  border-color: var(--ink-border-strong);
+  box-shadow: var(--shadow-4), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.glass-card-glow {
+  background: var(--glass-medium);
+  backdrop-filter: blur(var(--glass-blur-lg));
+  -webkit-backdrop-filter: blur(var(--glass-blur-lg));
+  border: 1px solid var(--ink-border-accent);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-glass), 0 0 30px hsla(var(--ink-accent-h), var(--ink-accent-s), var(--ink-accent-l), 0.08);
+  animation: borderGlow 3s ease-in-out infinite;
+  transition: all var(--transition-normal);
+}
+
+.glass-card-glow:hover {
+  box-shadow: var(--shadow-4), 0 0 40px hsla(var(--ink-accent-h), var(--ink-accent-s), var(--ink-accent-l), 0.15);
+  transform: translateY(-2px);
+}
+
+/* ========================================================================
+   Gradient Mesh Background
+   ======================================================================== */
+.gradient-mesh-bg {
+  position: relative;
+  overflow: hidden;
+}
+
+.gradient-mesh-bg::before {
+  content: '';
+  position: absolute;
+  inset: -50%;
+  background: 
+    radial-gradient(ellipse at 20% 50%, hsla(var(--ink-accent-h), 70%, 60%, 0.08) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, hsla(calc(var(--ink-accent-h) + 60), 60%, 50%, 0.06) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 80%, hsla(calc(var(--ink-accent-h) - 40), 50%, 55%, 0.06) 0%, transparent 50%);
+  background-size: 200% 200%;
+  animation: gradientShift 15s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ========================================================================
+   3D Card Perspective
+   ======================================================================== */
+.card-3d {
+  perspective: 800px;
+  transform-style: preserve-3d;
+}
+
+.card-3d-inner {
+  transition: transform var(--duration-normal) var(--ease-out);
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+.card-3d:hover .card-3d-inner {
+  transform: rotateY(-2deg) rotateX(2deg) scale(1.02);
+}
+
+/* ========================================================================
+   Stagger Animation Utilities
+   ======================================================================== */
+.stagger-parent > .stagger-child {
+  opacity: 0;
+  animation: staggerIn var(--duration-slow) var(--ease-out) forwards;
+}
+
+.stagger-parent > .stagger-child:nth-child(1)  { animation-delay: 0ms; }
+.stagger-parent > .stagger-child:nth-child(2)  { animation-delay: 50ms; }
+.stagger-parent > .stagger-child:nth-child(3)  { animation-delay: 100ms; }
+.stagger-parent > .stagger-child:nth-child(4)  { animation-delay: 150ms; }
+.stagger-parent > .stagger-child:nth-child(5)  { animation-delay: 200ms; }
+.stagger-parent > .stagger-child:nth-child(6)  { animation-delay: 250ms; }
+.stagger-parent > .stagger-child:nth-child(7)  { animation-delay: 300ms; }
+.stagger-parent > .stagger-child:nth-child(8)  { animation-delay: 350ms; }
+.stagger-parent > .stagger-child:nth-child(9)  { animation-delay: 400ms; }
+.stagger-parent > .stagger-child:nth-child(10) { animation-delay: 450ms; }
+.stagger-parent > .stagger-child:nth-child(n+11) { animation-delay: 500ms; }
+
+/* Shine overlay for premium cards */
+.shine-overlay {
+  position: relative;
+  overflow: hidden;
+}
+
+.shine-overlay::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 40%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.03) 50%,
+    transparent 100%
+  );
+  transform: translateX(-100%);
+  pointer-events: none;
+}
+
+.shine-overlay:hover::after {
+  animation: shineSlide 0.8s var(--ease-out) forwards;
+}
+
+/* ========================================================================
+   Stat Number Animation
+   ======================================================================== */
+.stat-number {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: var(--font-2xl);
+  background: linear-gradient(135deg, var(--ink-text-primary) 0%, var(--ink-primary) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: countUp var(--duration-slow) var(--ease-out) forwards;
 }

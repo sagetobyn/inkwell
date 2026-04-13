@@ -1,15 +1,118 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { useToast } from '../components/Toast';
 import Tooltip from '../components/Tooltip';
 import ContextMenu from '../components/ContextMenu';
+import ProgressRing from '../components/ProgressRing';
 import {
   Settings, Plus, Search, BookOpen, Folder, Trash2, RefreshCw,
   Grid3X3, List, ChevronDown, Heart, Clock, Star,
   ArrowUpDown, PanelLeftClose, PanelLeft, Import, FilePlus,
-  MoreVertical, ExternalLink, BookMarked, Command
+  MoreVertical, ExternalLink, BookMarked, Command,
+  Play, Flame, BookText, Library, FolderOpen
 } from 'lucide-react';
 import './LibraryView.css';
+
+// Stable memoized component — MUST be outside LibraryView to prevent flicker
+const BookCover = React.memo(({ book, isList, isRecent, isFav, isHero, thumbnailFileName, getThumbnailUrl, showCovers, isFavoriteCheck }) => {
+  const [url, setUrl] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    if (showCovers !== false && thumbnailFileName && getThumbnailUrl) {
+      getThumbnailUrl(thumbnailFileName).then(resolved => {
+        if (active) setUrl(resolved);
+      });
+    } else {
+      setUrl(null);
+    }
+    return () => { active = false; };
+  }, [thumbnailFileName, getThumbnailUrl, showCovers]);
+
+  const letterChar = book.name.charAt(0).toUpperCase();
+
+  if (isHero) {
+    return (
+      <div className="hero-cover" style={{ background: book.coverColor }}>
+        {url ? (
+          <img 
+            src={url} 
+            alt="" 
+            className="hero-cover-img book-cover-img" 
+            loading="lazy" 
+            onLoad={() => console.log(`[Thumbnails] Successfully loaded hero cover: ${url}`)}
+            onError={() => {
+              console.warn(`[Thumbnails] Failed to load hero cover: ${url}`);
+              setUrl(null);
+            }}
+          />
+        ) : (
+          <span className="hero-cover-letter">{letterChar}</span>
+        )}
+      </div>
+    );
+  }
+
+  if (isFav) {
+    return (
+      <div className="favorite-cover" style={{ background: book.coverColor }}>
+        {url ? (
+          <img 
+            src={url} 
+            alt="" 
+            className="book-cover-img" 
+            loading="lazy" 
+            onLoad={() => console.log(`[Thumbnails] Successfully loaded favorite cover: ${url}`)}
+            onError={() => {
+              console.warn(`[Thumbnails] Failed to load favorite cover: ${url}`);
+              setUrl(null);
+            }}
+          />
+        ) : (
+          <span className="favorite-cover-letter">{letterChar}</span>
+        )}
+        <div className="favorite-badge">
+          <Heart size={10} fill="currentColor" />
+        </div>
+      </div>
+    );
+  }
+
+  const fallback = (
+    <span className={isList ? '' : (isRecent ? 'recent-cover-letter' : 'book-cover-letter')}>
+      {letterChar}
+    </span>
+  );
+
+  let className = 'book-cover';
+  if (isList) className = 'book-list-cover';
+  if (isRecent) className = 'recent-cover';
+
+  return (
+    <div className={className} style={{ background: book.coverColor }}>
+      <div className="book-spine-detail" />
+      {url ? (
+        <img 
+          src={url} 
+          alt="" 
+          className="book-cover-img" 
+          loading="lazy" 
+          onLoad={() => console.log(`[Thumbnails] Successfully loaded cover: ${url}`)}
+          onError={() => {
+            console.warn(`[Thumbnails] Failed to load cover: ${url}`);
+            setUrl(null);
+          }}
+        />
+      ) : fallback}
+
+      {!isList && !isRecent && isFavoriteCheck && (
+        <div className="book-fav-badge">
+          <Heart size={10} fill="currentColor" />
+        </div>
+      )}
+    </div>
+  );
+});
 
 const LibraryView = () => {
   const {
@@ -18,55 +121,13 @@ const LibraryView = () => {
     searchQuery, setSearchQuery, viewMode, updateViewMode, sortOrder, updateSortOrder,
     sidebarCollapsed, setSidebarCollapsed, recentBooks, isFavorite, toggleFavorite,
     setCommandPaletteOpen, settings, removeImportedBook, bookProgress, totalPagesMap,
-    thumbnailsMap, getThumbnailUrl
+    thumbnailsMap, getThumbnailUrl, continueReadingBook, computedStats, favoriteBookIds
   } = useAppContext();
 
   const addToast = useToast();
   const [contextMenu, setContextMenu] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
 
-  // Helper component for async thumbnail resolution
-  const BookCover = ({ book, isList = false, isRecent = false }) => {
-    const [url, setUrl] = useState(null);
-    const fileName = thumbnailsMap[book.path];
-
-    useState(() => {
-      let active = true;
-      if (fileName && getThumbnailUrl) {
-        getThumbnailUrl(fileName).then(resolved => {
-          if (active) setUrl(resolved);
-        });
-      }
-      return () => { active = false; };
-    }, [fileName, getThumbnailUrl]);
-
-    const fallback = (
-      <span className={isList ? '' : (isRecent ? 'recent-cover-letter' : 'book-cover-letter')}>
-        {book.name.charAt(0).toUpperCase()}
-      </span>
-    );
-
-    let className = 'book-cover';
-    if (isList) className = 'book-list-cover';
-    if (isRecent) className = 'recent-cover';
-
-    return (
-      <div
-        className={className}
-        style={{ background: book.coverColor }}
-      >
-        {url ? (
-          <img src={url} alt="" className="book-cover-img" loading="lazy" />
-        ) : fallback}
-
-        {!isList && !isRecent && isFavorite(book.path) && (
-          <div className="book-fav-badge">
-            <Heart size={10} fill="currentColor" />
-          </div>
-        )}
-      </div>
-    );
-  };
 
   const activeCategoryName = categories.find(c => c.id === activeCategoryId)?.name || "Library";
   const bookCount = books.length;
@@ -123,6 +184,132 @@ const LibraryView = () => {
     return 0;
   };
 
+  // Get all favorite books
+  const favoriteBooks = useMemo(() => {
+    return books.filter(b => isFavorite(b.path));
+  }, [books, favoriteBookIds]);
+
+  // ─── Continue Reading Hero ───
+  const renderHeroSection = () => {
+    if (settings.showHeroSection === false || !continueReadingBook || searchQuery) return null;
+
+    const progress = getBookProgress(continueReadingBook);
+    const displayName = settings.showFileExtensions !== false
+      ? continueReadingBook.name
+      : continueReadingBook.name.replace(/\.pdf$/i, '');
+    const prog = bookProgress[continueReadingBook.path];
+    const total = totalPagesMap[continueReadingBook.path];
+    const pageInfo = prog && total ? `Page ${prog.page} of ${total}` : '';
+
+    return (
+      <section className="hero-section">
+        <div
+          className="hero-card"
+          onClick={() => openBook(continueReadingBook)}
+        >
+          <BookCover 
+            book={continueReadingBook} 
+            isHero={true} 
+            thumbnailFileName={thumbnailsMap[continueReadingBook.path]}
+            getThumbnailUrl={getThumbnailUrl}
+            showCovers={settings.showBookCovers}
+          />
+
+          <div className="hero-info">
+            <div className="hero-label">
+              <div className="hero-label-dot" />
+              Continue Reading
+            </div>
+            <h2 className="hero-title truncate">{displayName}</h2>
+            <div className="hero-meta">
+              {pageInfo && <span>{pageInfo}</span>}
+              {settings.showBookProgress !== false && progress > 0 && <span>{progress}% complete</span>}
+            </div>
+            <button
+              className="hero-resume-btn"
+              onClick={(e) => { e.stopPropagation(); openBook(continueReadingBook); }}
+            >
+              <Play size={14} fill="currentColor" />
+              Resume Reading
+            </button>
+          </div>
+
+          {settings.showBookProgress !== false && (
+            <div className="hero-progress-ring">
+              <ProgressRing progress={progress} size={80} stroke={5} />
+              <span className="hero-progress-text">{progress}%</span>
+            </div>
+          )}
+        </div>
+      </section>
+    );
+  };
+
+  // ─── Reading Stats Strip ───
+  const renderStatsStrip = () => {
+    if (books.length === 0 || searchQuery || settings.showLibraryStats === false) return null;
+
+    return (
+      <section className="stats-strip stagger-parent">
+        <div className="stat-card stagger-child">
+          <Library size={18} className="stat-card-icon" />
+          <span className="stat-card-value">{computedStats.booksInLibrary}</span>
+          <span className="stat-card-label">In Library</span>
+        </div>
+        <div className="stat-card stagger-child">
+          <BookText size={18} className="stat-card-icon" />
+          <span className="stat-card-value">{computedStats.totalPagesRead}</span>
+          <span className="stat-card-label">Pages Read</span>
+        </div>
+        <div className="stat-card stagger-child">
+          <BookOpen size={18} className="stat-card-icon" />
+          <span className="stat-card-value">{computedStats.totalBooksOpened}</span>
+          <span className="stat-card-label">Books Opened</span>
+        </div>
+        <div className="stat-card stagger-child">
+          <Flame size={18} className="stat-card-icon" />
+          <span className="stat-card-value">{computedStats.readingStreak}</span>
+          <span className="stat-card-label">Day Streak</span>
+        </div>
+      </section>
+    );
+  };
+
+  // ─── Favorites Shelf ───
+  const renderFavoritesShelf = () => {
+    if (favoriteBooks.length === 0 || searchQuery) return null;
+
+    return (
+      <section className="favorites-section">
+        <div className="section-header-row">
+          <Heart size={14} />
+          <h3>Favorites</h3>
+        </div>
+        <div className="favorites-scroll">
+          {favoriteBooks.map((book) => (
+            <div
+              key={book.id}
+              className="favorite-card"
+              onClick={() => openBook(book)}
+              onContextMenu={(e) => handleContextMenu(e, book)}
+            >
+              <BookCover 
+                book={book} 
+                isFav={true} 
+                thumbnailFileName={thumbnailsMap[book.path]}
+                getThumbnailUrl={getThumbnailUrl}
+                showCovers={settings.showBookCovers}
+              />
+              <span className="favorite-name truncate">
+                {settings.showFileExtensions !== false ? book.name : book.name.replace(/\.pdf$/i, '')}
+              </span>
+            </div>
+          ))}
+        </div>
+      </section>
+    );
+  };
+
   const renderBookGrid = () => {
     if (isScanning && books.length === 0) {
       return (
@@ -145,12 +332,22 @@ const LibraryView = () => {
             <BookOpen size={48} strokeWidth={1.2} />
           </div>
           <h3>Your library is empty</h3>
-          <p>Import a PDF or map a folder to get started.</p>
-          <div className="empty-state-actions">
-            <button className="btn-primary" onClick={importPDF}>
-              <FilePlus size={16} />
-              Import PDF
-            </button>
+          <p>Import a PDF or map a folder to start building your reading collection.</p>
+          <div className="empty-state-cards">
+            <div className="empty-action-card" onClick={importPDF}>
+              <div className="empty-action-icon">
+                <FilePlus size={24} />
+              </div>
+              <span className="empty-action-label">Import PDF</span>
+              <span className="empty-action-desc">Add individual files</span>
+            </div>
+            <div className="empty-action-card" onClick={addCategory}>
+              <div className="empty-action-icon">
+                <FolderOpen size={24} />
+              </div>
+              <span className="empty-action-label">Map Folder</span>
+              <span className="empty-action-desc">Watch an entire directory</span>
+            </div>
           </div>
         </div>
       );
@@ -167,16 +364,24 @@ const LibraryView = () => {
               onClick={() => openBook(book)}
               onContextMenu={(e) => handleContextMenu(e, book)}
             >
-              <BookCover book={book} isList={true} />
+              <BookCover 
+                book={book} 
+                isList={true} 
+                thumbnailFileName={thumbnailsMap[book.path]}
+                getThumbnailUrl={getThumbnailUrl}
+                showCovers={settings.showBookCovers}
+              />
               <div className="book-list-info">
                 <span className="book-list-name truncate">{settings.showFileExtensions !== false ? book.name : book.name.replace(/\.pdf$/i, '')}</span>
                 <span className="book-list-meta">{book.folder || 'Library'}</span>
               </div>
-              <div className="book-list-progress">
-                <div className="progress-bar-mini">
-                  <div className="progress-fill-mini" style={{ width: `${getBookProgress(book)}%` }} />
+              {settings.showBookProgress !== false && (
+                <div className="book-list-progress">
+                  <div className="progress-bar-mini">
+                    <div className="progress-fill-mini" style={{ width: `${getBookProgress(book)}%` }} />
+                  </div>
                 </div>
-              </div>
+              )}
               {isFavorite(book.path) && (
                 <Heart size={14} className="book-list-fav" fill="currentColor" />
               )}
@@ -201,25 +406,34 @@ const LibraryView = () => {
           <span>{folderName}</span>
           <span className="badge">{folderBooks.length}</span>
         </div>
-        <div className="books-grid">
+        <div className="books-grid stagger-parent">
           {folderBooks.map((book, index) => (
             <div
               key={book.id}
-              className="book-card animate-slide-up"
-              style={{ animationDelay: `${(index % 10) * 40}ms` }}
+              className={`book-card stagger-child shine-overlay ${settings.enable3DEffects !== false ? 'card-3d' : ''}`}
               onClick={() => openBook(book)}
               onContextMenu={(e) => handleContextMenu(e, book)}
             >
-              <BookCover book={book} />
-              <div className="book-info">
-                <h3 className="book-title truncate" title={book.name}>
-                  {settings.showFileExtensions !== false ? book.name : book.name.replace(/\.pdf$/i, '')}
-                </h3>
-                <div className="book-progress-row">
-                  <div className="progress-bar-slim">
-                    <div className="progress-fill-slim" style={{ width: `${getBookProgress(book)}%` }} />
-                  </div>
-                  <span className="progress-label mono">{getBookProgress(book)}%</span>
+              <div className={settings.enable3DEffects !== false ? 'card-3d-inner' : ''}>
+                <BookCover 
+                  book={book} 
+                  thumbnailFileName={thumbnailsMap[book.path]}
+                  getThumbnailUrl={getThumbnailUrl}
+                  showCovers={settings.showBookCovers}
+                  isFavoriteCheck={isFavorite(book.path)}
+                />
+                <div className="book-info">
+                  <h3 className="book-title truncate" title={book.name}>
+                    {settings.showFileExtensions !== false ? book.name : book.name.replace(/\.pdf$/i, '')}
+                  </h3>
+                  {settings.showBookProgress !== false && (
+                    <div className="book-progress-row">
+                      <div className="progress-bar-slim">
+                        <div className="progress-fill-slim" style={{ width: `${getBookProgress(book)}%` }} />
+                      </div>
+                      <span className="progress-label mono">{getBookProgress(book)}%</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -230,7 +444,7 @@ const LibraryView = () => {
   };
 
   const renderRecentStrip = () => {
-    if (recentBooks.length === 0) return null;
+    if (settings.showRecentSection === false || recentBooks.length === 0 || searchQuery) return null;
     return (
       <section className="recent-section">
         <div className="section-header-row">
@@ -244,7 +458,13 @@ const LibraryView = () => {
               className="recent-card"
               onClick={() => openBook(book)}
             >
-              <BookCover book={book} isRecent={true} />
+              <BookCover 
+                book={book} 
+                isRecent={true} 
+                thumbnailFileName={thumbnailsMap[book.path]}
+                getThumbnailUrl={getThumbnailUrl}
+                showCovers={settings.showBookCovers}
+              />
               <span className="recent-name truncate">{book.name}</span>
             </div>
           ))}
@@ -347,7 +567,7 @@ const LibraryView = () => {
         </aside>
 
         {/* ─── Content ─── */}
-        <main className="lib-content">
+        <main className={`lib-content ${settings.gradientMesh !== false ? 'gradient-mesh-bg' : ''}`}>
           {/* ─── Content Header ─── */}
           <div className="content-toolbar">
             <div className="content-toolbar-left">
@@ -378,7 +598,10 @@ const LibraryView = () => {
 
           {scanError && <div className="error-banner">{scanError}</div>}
 
-          {/* Recent Strip */}
+          {/* ── Premium Homepage Sections ── */}
+          {activeCategoryId === 'all' && renderHeroSection()}
+          {activeCategoryId === 'all' && renderStatsStrip()}
+          {activeCategoryId === 'all' && renderFavoritesShelf()}
           {activeCategoryId === 'all' && renderRecentStrip()}
 
           {/* Books */}

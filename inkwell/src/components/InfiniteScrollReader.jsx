@@ -151,7 +151,7 @@ PageCanvas.displayName = 'PageCanvas';
 
 // ─── Infinite Scroll Reader ─────────────────────────────────────────────────
 // forwardRef so parent can call scrollToPage(n) imperatively.
-const InfiniteScrollReader = forwardRef(({
+const InfiniteScrollReader = React.memo(forwardRef(({
   filePath, scale, showGlow, onPageChange, onTotalPages, filter
 }, ref) => {
   const [pdf, setPdf] = useState(null);
@@ -203,11 +203,11 @@ const InfiniteScrollReader = forwardRef(({
   }, [filePath]);
 
   // ── Scroll-to-page (exposed via ref) ──────────────────────────────────────
-  const scrollToPage = useCallback((pageNum) => {
+  const scrollToPage = useCallback((pageNum, behavior = 'smooth') => {
     const idx = pageNum - 1;
     const sentinel = pageRefs.current[idx];
     if (sentinel) {
-      sentinel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      sentinel.scrollIntoView({ behavior, block: 'start' });
     } else {
       // page not mounted yet — expand range then scroll
       setVisibleRange(prev => ({
@@ -218,7 +218,7 @@ const InfiniteScrollReader = forwardRef(({
       requestAnimationFrame(() => {
         setTimeout(() => {
           const el = pageRefs.current[idx];
-          el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          el?.scrollIntoView({ behavior, block: 'start' });
         }, 50);
       });
     }
@@ -330,7 +330,7 @@ const InfiniteScrollReader = forwardRef(({
       </div>
     </div>
   );
-});
+}));
 
 InfiniteScrollReader.displayName = 'InfiniteScrollReader';
 
