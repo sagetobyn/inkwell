@@ -220,6 +220,76 @@
   --ink-text-tertiary: #636e72;
 }
 
+.theme-matcha {
+  --ink-bg: #1b1e17;
+  --ink-bg-secondary: #151812;
+  --ink-surface-0: #24291f;
+  --ink-surface: #2d3327;
+  --ink-surface-2: #363d2f;
+  --ink-surface-hover: #404838;
+  --ink-border: rgba(163, 190, 140, 0.05);
+  --ink-border-strong: rgba(163, 190, 140, 0.1);
+  --ink-text-primary: #e1e8d7;
+  --ink-text-secondary: #a3be8c;
+  --ink-text-tertiary: #829670;
+}
+
+.theme-coffee {
+  --ink-bg: #1a1614;
+  --ink-bg-secondary: #14110f;
+  --ink-surface-0: #251e1b;
+  --ink-surface: #302723;
+  --ink-surface-2: #3b302a;
+  --ink-surface-hover: #473a33;
+  --ink-border: rgba(196, 155, 132, 0.05);
+  --ink-border-strong: rgba(196, 155, 132, 0.1);
+  --ink-text-primary: #f3ede8;
+  --ink-text-secondary: #c49b84;
+  --ink-text-tertiary: #a6826e;
+}
+
+.theme-solarized {
+  --ink-bg: #002b36;
+  --ink-bg-secondary: #00212b;
+  --ink-surface-0: #073642;
+  --ink-surface: #0a4c5e;
+  --ink-surface-2: #0d5a6f;
+  --ink-surface-hover: #0f6880;
+  --ink-border: rgba(147, 161, 161, 0.05);
+  --ink-border-strong: rgba(147, 161, 161, 0.1);
+  --ink-text-primary: #93a1a1;
+  --ink-text-secondary: #839496;
+  --ink-text-tertiary: #586e75;
+}
+
+.theme-ocean {
+  --ink-bg: #0d1b2a;
+  --ink-bg-secondary: #0b1522;
+  --ink-surface-0: #1b263b;
+  --ink-surface: #2b3d5b;
+  --ink-surface-2: #354c70;
+  --ink-surface-hover: #415a77;
+  --ink-border: rgba(119, 141, 169, 0.05);
+  --ink-border-strong: rgba(119, 141, 169, 0.1);
+  --ink-text-primary: #e0e1dd;
+  --ink-text-secondary: #778da9;
+  --ink-text-tertiary: #415a77;
+}
+
+.theme-rose {
+  --ink-bg: #1e1a1b;
+  --ink-bg-secondary: #171314;
+  --ink-surface-0: #2a2426;
+  --ink-surface: #362e31;
+  --ink-surface-2: #42383c;
+  --ink-surface-hover: #4f4348;
+  --ink-border: rgba(212, 163, 179, 0.05);
+  --ink-border-strong: rgba(212, 163, 179, 0.1);
+  --ink-text-primary: #f5eef0;
+  --ink-text-secondary: #d4a3b3;
+  --ink-text-tertiary: #b38997;
+}
+
 /* ========================================================================
    Reset & Base
    ======================================================================== */
@@ -227,6 +297,15 @@
 *::before,
 *::after {
   box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
   margin: 0;
   padding: 0;
 }
@@ -240,7 +319,7 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow: hidden;
-  user-select: auto; /* Changed from none to allow selection context to persist */
+  user-select: auto;
   text-rendering: optimizeLegibility;
   transition: background var(--ink-transition-duration) ease;
   position: relative;

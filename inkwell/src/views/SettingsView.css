@@ -224,8 +224,8 @@
 /* ── Theme Presets Grid ── */
 .theme-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: var(--space-3);
+  grid-template-columns: repeat(6, 1fr);
+  gap: var(--space-2);
   width: 100%;
 }
 
@@ -270,7 +270,7 @@
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, transparent 100%);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, transparent 100%);
 }
 
 .theme-preset-btn span {

@@ -5,13 +5,14 @@ import LibraryView from './views/LibraryView';
 import ReaderView from './views/ReaderView';
 import SettingsView from './views/SettingsView';
 import CommandPalette from './components/CommandPalette';
+import TitleBar from './components/TitleBar';
 import {
   Settings, Moon, Sun, Maximize, BookOpen,
   ZoomIn, ZoomOut, ArrowLeft, Search, Palette
 } from 'lucide-react';
 import './components/components.css';
 import './App.css';
-import TitleBar from './components/TitleBar';
+
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -32,7 +33,7 @@ class ErrorBoundary extends React.Component {
           <pre style={{ color: '#ef4444', marginTop: '1rem', whiteSpace: 'pre-wrap' }}>
             {this.state.error?.toString()}
           </pre>
-          <button 
+          <button
             onClick={() => window.location.reload()}
             style={{ marginTop: '2rem', padding: '0.5rem 1rem', background: '#3b82f6', border: 'none', borderRadius: '4px', color: 'white', cursor: 'pointer' }}
           >
@@ -54,6 +55,7 @@ const AppContent = () => {
     closeBook, currentBook,
     settings,
     openSettingsWindow,
+    isFullscreen,
   } = useAppContext();
 
   const isSettingsWindow = useMemo(() => {
@@ -126,11 +128,11 @@ const AppContent = () => {
 
 
   return (
-    <div className={`app-container ${isSettingsWindow ? 'settings-window-active' : ''}`}>
-      <TitleBar />
+    <div className={`app-container ${isSettingsWindow ? 'settings-window-active' : ''} ${isFullscreen && currentView === 'reader' ? 'fullscreen-mode' : ''}`}>
+      {!(isFullscreen && currentView === 'reader') && <TitleBar />}
       {/* Global Background for Skinning */}
       <div className="app-bg-container" />
-      
+
       <main className="view-container">
         <div className="view-transition" key={currentView}>
           {currentView === 'library' && <LibraryView />}

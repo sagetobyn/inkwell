@@ -1,39 +1,61 @@
 import React from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { Minus, Square, X } from 'lucide-react';
+import { isTauri } from '../utils/tauri';
 import './TitleBar.css';
 
 const TitleBar = () => {
-  const appWindow = getCurrentWindow();
-
-  const handleMinimize = (e) => {
+  const handleMinimize = async (e) => {
     e.stopPropagation();
-    appWindow.minimize();
+    console.log('[TitleBar] Minimize clicked');
+    if (isTauri()) {
+      const { getCurrentWindow } = await import('@tauri-apps/api/window');
+      getCurrentWindow().minimize();
+    } else {
+      console.warn('[TitleBar] Not in Tauri: Minimize suppressed');
+    }
   };
   
-  const handleMaximize = (e) => {
+  const handleMaximize = async (e) => {
     e.stopPropagation();
-    appWindow.toggleMaximize();
+    console.log('[TitleBar] Maximize clicked');
+    if (isTauri()) {
+      const { getCurrentWindow } = await import('@tauri-apps/api/window');
+      getCurrentWindow().toggleMaximize();
+    } else {
+      console.warn('[TitleBar] Not in Tauri: Maximize suppressed');
+    }
   };
   
-  const handleClose = (e) => {
+  const handleClose = async (e) => {
     e.stopPropagation();
-    appWindow.close();
+    console.log('[TitleBar] Close clicked');
+    if (isTauri()) {
+      const { getCurrentWindow } = await import('@tauri-apps/api/window');
+      getCurrentWindow().close();
+    } else {
+      console.warn('[TitleBar] Not in Tauri: Close suppressed');
+    }
   };
 
   return (
-    <div className="titlebar" data-tauri-drag-region>
+    <div className="titlebar">
+      {/* Dedicate Background for Dragging */}
+      <div className="titlebar-drag-region" data-tauri-drag-region />
+      
+      <div className="titlebar-title" data-tauri-drag-region>Inkwell Reader</div>
+
       <div className="titlebar-controls">
-        <button className="control-dot close" onClick={handleClose}>
-          <svg viewBox="0 0 10 10"><path d="M 2,2 L 8,8 M 8,2 L 2,8" /></svg>
+        <button className="control-btn minimize" onClick={handleMinimize} title="Minimize">
+          <Minus size={14} />
         </button>
-        <button className="control-dot minimize" onClick={handleMinimize}>
-          <svg viewBox="0 0 10 10"><path d="M 2,5 L 8,5" /></svg>
+        <button className="control-btn maximize" onClick={handleMaximize} title="Maximize/Restore">
+          <Square size={12} />
         </button>
-        <button className="control-dot maximize" onClick={handleMaximize}>
-          <svg viewBox="0 0 10 10"><path d="M 2.5,2.5 L 7.5,2.5 L 7.5,7.5 L 2.5,7.5 Z" /></svg>
+        <button className="control-btn close" onClick={handleClose} title="Close">
+          <X size={14} />
         </button>
       </div>
-      <div className="titlebar-title" data-tauri-drag-region>Inkwell Reader</div>
     </div>
   );
 };

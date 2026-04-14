@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { useToast } from '../components/Toast';
+import { isTauri } from '../utils/tauri';
 import Tooltip from '../components/Tooltip';
 import ContextMenu from '../components/ContextMenu';
 import ProgressRing from '../components/ProgressRing';
@@ -317,6 +318,7 @@ const LibraryView = () => {
   useEffect(() => {
     let unlisten;
     const setupDropListener = async () => {
+      if (!isTauri()) return;
       try {
         const { getCurrentWindow } = await import('@tauri-apps/api/window');
         unlisten = await getCurrentWindow().onFileDropEvent((event) => {

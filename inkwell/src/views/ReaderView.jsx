@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { useToast } from '../components/Toast';
+import { isTauri } from '../utils/tauri';
 import Tooltip from '../components/Tooltip';
 import {
   ArrowLeft, ZoomIn, ZoomOut, Maximize, Minimize,
   Moon, Sun, ChevronLeft,
-  ChevronRight, Columns, Minus, Type, Highlighter, Check, Eraser
+  ChevronRight, Columns, Minus, Type, Highlighter, Check, Eraser, Palette, Settings
 } from 'lucide-react';
 import InfiniteScrollReader from '../components/InfiniteScrollReader';
 import PdfRenderer from '../components/PdfRenderer';
@@ -15,7 +16,8 @@ const ReaderView = () => {
   const {
     closeBook, currentBook, shortcuts, bookProgress, updateBookProgress,
     pdfNightMode, togglePdfNightMode, settings, updateSettings,
-    setBookTotalPages, totalPagesMap
+    setBookTotalPages, totalPagesMap, updateTheme, openSettingsWindow,
+    isFullscreen, toggleFullscreen
   } = useAppContext();
 
   const addToast = useToast();
@@ -30,11 +32,13 @@ const ReaderView = () => {
     currentBook?.path ? (totalPagesMap[currentBook.path] || 0) : 0
   );
 
-  const [isFullscreen, setIsFullscreen] = useState(false);
   const [dictQuery, setDictQuery] = useState(null);
   const [showControls, setShowControls] = useState(true);
   const [showGoToPage, setShowGoToPage] = useState(false);
   const [goToPageInput, setGoToPageInput] = useState('');
+  const [showPalette, setShowPalette] = useState(false);
+  const paletteRef = useRef(null);
+  const dictAbortControllerRef = useRef(null);
   const [saveStatus, setSaveStatus] = useState('idle'); // 'idle' | 'saving' | 'success' | 'error'
 
   const readerRef = useRef(null);   // ref to InfiniteScrollReader (exposes scrollToPage)
@@ -113,17 +117,6 @@ const ReaderView = () => {
   const handleZoomOut = () => setScale(s => Math.max(s - 0.2, 0.5));
 
   // ── Fullscreen ──────────────────────────────────────────────────────────
-  const toggleFullscreen = async () => {
-    try {
-      const { getCurrentWindow } = await import('@tauri-apps/api/window');
-      const appWindow = getCurrentWindow();
-      const current = await appWindow.isFullscreen();
-      await appWindow.setFullscreen(!current);
-      setIsFullscreen(!current);
-    } catch (err) {
-      console.error('Fullscreen API error:', err);
-    }
-  };
 
   // ── Auto-hide controls ──────────────────────────────────────────────────
   const resetControlsTimer = useCallback(() => {
@@ -156,6 +149,10 @@ const ReaderView = () => {
       }
     };
 
+    if (isFullscreen) {
+      setShowControls(false);
+    }
+
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('scroll', handleScroll, true);
     resetControlsTimer();
@@ -165,6 +162,20 @@ const ReaderView = () => {
       if (controlsTimeout.current) clearTimeout(controlsTimeout.current);
     };
   }, [resetControlsTimer, settings.readerZenMode]);
+
+  // ── Click Away for Palette ──
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (paletteRef.current && !paletteRef.current.contains(event.target)) {
+        setShowPalette(false);
+      }
+    };
+    if (showPalette) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showPalette]);
+
 
   // ── Keyboard shortcuts ──────────────────────────────────────────────────
   useEffect(() => {
@@ -238,6 +249,10 @@ const ReaderView = () => {
 
   // ── Save Highlight to PDF Binary ─────────────────────────────────────────
   const handleSaveHighlight = async () => {
+    if (!isTauri()) {
+      addToast('Highlighting is only available in the desktop application.', 'info');
+      return;
+    }
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed || !currentBook?.path) {
       addToast('Select some text first to highlight', 'info');
@@ -407,6 +422,10 @@ const ReaderView = () => {
   };
 
   const handleRemoveHighlight = async () => {
+    if (!isTauri()) {
+      addToast('Highlighting is only available in the desktop application.', 'info');
+      return;
+    }
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed || !currentBook?.path) {
       addToast('Select text over highlights to erase them', 'info');
@@ -527,6 +546,7 @@ const ReaderView = () => {
   };
 
   const handleEraseHighlight = async () => {
+    if (!isTauri()) return;
     if (!selectedHighlight || !currentBook?.path) return;
     
     try {
@@ -627,19 +647,57 @@ const ReaderView = () => {
       const selection = window.getSelection();
       const word = selection.toString().trim();
 
-      if (word && word.length > 1 && word.length < 25 && !word.includes(' ')) {
+      if (word && word.length > 1 && word.length < 35 && !word.includes('\n')) {
+        // Abort previous lookup if any
+        if (dictAbortControllerRef.current) {
+          dictAbortControllerRef.current.abort();
+        }
+        dictAbortControllerRef.current = new AbortController();
+
         const rect = selection.getRangeAt(0).getBoundingClientRect();
-        setDictQuery({ word, loading: true, x: rect.left + (rect.width / 2), y: rect.top - 10, data: null });
+        setDictQuery({ 
+          word, 
+          loading: true, 
+          x: rect.left + (rect.width / 2), 
+          y: rect.top - 10, 
+          data: null 
+        });
 
         try {
-          const cleanWord = word.replace(/[^a-zA-Z]/g, '').toLowerCase();
-          if (!cleanWord) throw new Error('Invalid word');
-          const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${cleanWord}`);
-          if (!res.ok) throw new Error('Not found');
+          // Allow apostrophes and hyphens in dictionary words
+          const cleanWord = word.replace(/[^a-zA-Z'-]/g, '').toLowerCase();
+          if (!cleanWord || cleanWord === '-' || cleanWord === "'") throw new Error('Invalid word');
+
+          const signal = dictAbortControllerRef.current.signal;
+          const fetchPromise = fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${cleanWord}`, { signal });
+          
+          // 8s timeout for dictionary lookup
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Timeout')), 8000)
+          );
+
+          const res = await Promise.race([fetchPromise, timeoutPromise]);
+          
+          if (!res.ok) throw new Error('Definition not found');
           const data = await res.json();
-          setDictQuery(prev => prev && prev.word === word ? { ...prev, loading: false, data: data[0] } : prev);
+          
+          if (!Array.isArray(data) || !data[0]) throw new Error('Invalid response');
+
+          setDictQuery(prev => 
+            prev && prev.word === word 
+              ? { ...prev, loading: false, data: data[0] } 
+              : prev
+          );
         } catch (err) {
-          setDictQuery(prev => prev && prev.word === word ? { ...prev, loading: false, error: 'Definition not found.' } : prev);
+          if (err.name === 'AbortError') return;
+          console.warn('Dictionary error:', err.message);
+          setDictQuery(prev => 
+            prev && prev.word === word 
+              ? { ...prev, loading: false, error: err.message === 'Timeout' ? 'Request timed out.' : 'Definition not found.' } 
+              : prev
+          );
+        } finally {
+          dictAbortControllerRef.current = null;
         }
       } else {
         if (selection.isCollapsed) {
@@ -665,6 +723,8 @@ const ReaderView = () => {
     return () => document.removeEventListener('mouseup', handleMouseUp);
   }, []);
 
+
+
   // ── Go-to-page ──────────────────────────────────────────────────────────
   const handleGoToPage = () => {
     const num = parseInt(goToPageInput, 10);
@@ -685,28 +745,91 @@ const ReaderView = () => {
   // ── Night mode + Brightness filter ─────────────────────────────────────
   const combinedFilter = useMemo(() => {
     const filters = [];
-    if (pdfNightMode) {
-      if (settings.nightModeType === 'sepia') {
-        const warmth = settings.sepiaWarmth || 50;
-        filters.push(`sepia(${warmth / 100}) brightness(0.9) contrast(0.95)`);
-      } else {
-        filters.push('invert(0.88) hue-rotate(180deg) contrast(0.95)');
-      }
+    const mode = settings.readerMode || 'light';
+
+    // ── Mode-Specific Filters ──
+    switch (mode) {
+      case 'sepia':
+        // Exact match via mix-blend-mode in CSS
+        filters.push('contrast(0.9)');
+        break;
+      case 'dark': // Dust
+        filters.push('invert(0.9) hue-rotate(180deg) brightness(1.0)');
+        break;
+      case 'nord':
+        filters.push('invert(0.9) hue-rotate(170deg) brightness(1.1) contrast(0.9)');
+        break;
+      case 'sunset':
+        // Target: #1a1a2e
+        filters.push('invert(1) hue-rotate(185deg) brightness(0.6) contrast(1.1)');
+        break;
+      case 'midnight':
+        filters.push('invert(0.9) hue-rotate(180deg) brightness(1.0)');
+        break;
+      case 'oled':
+        filters.push('invert(1) hue-rotate(180deg) brightness(1.0)');
+        break;
+      case 'matcha':
+        // Target: #1b1e17
+        filters.push('invert(1) hue-rotate(100deg) brightness(0.6) contrast(1.1)');
+        break;
+      case 'coffee':
+        // Target: #1a1614
+        filters.push('invert(1) hue-rotate(30deg) sepia(0.3) brightness(0.6) contrast(1.1)');
+        break;
+      case 'solarized':
+        // Target: #002b36
+        filters.push('invert(1) hue-rotate(165deg) brightness(0.8) contrast(1.1)');
+        break;
+      case 'ocean':
+        // Target: #0d1b2a
+        filters.push('invert(1) hue-rotate(195deg) brightness(0.7) contrast(1.0)');
+        break;
+      case 'rose':
+        // Target: #1e1a1b
+        filters.push('invert(1) hue-rotate(320deg) sepia(0.2) brightness(0.7)');
+        break;
+      default:
+        break;
     }
+
+    // ── Global Brightness Overlays ──
     const brightnessVal = settings.brightness || 100;
     if (brightnessVal !== 100) {
       filters.push(`brightness(${brightnessVal}%)`);
     }
+
     return filters.length > 0 ? filters.join(' ') : 'none';
-  }, [pdfNightMode, settings.nightModeType, settings.sepiaWarmth, settings.brightness]);
+  }, [settings.readerMode, settings.brightness]);
 
   const bookmarksList = [];
+
+  const READER_MODES = [
+    { id: 'light', label: 'Day', color: '#f5f6f8', theme: 'light' },
+    { id: 'sepia', label: 'Paper', color: '#f4ecd8', theme: 'sepia' },
+    { id: 'nord', label: 'Nordic', color: '#2e3440', theme: 'nord' },
+    { id: 'midnight', label: 'Midnight', color: '#1a1a1a', theme: 'midnight' },
+    { id: 'oled', label: 'OLED', color: '#000000', theme: 'midnight' }
+  ];
+
+  const handleSetMode = (mode) => {
+    updateSettings({ readerMode: mode.id });
+    updateTheme(mode.theme);
+    setShowPalette(false);
+  };
+
+  const handleBrightnessReset = (e) => {
+    if (e) e.stopPropagation();
+    if (settings.enableBrightnessReset !== false) {
+      updateSettings({ brightness: settings.brightnessResetValue || 100 });
+    }
+  };
 
   return (
     <div className={`reader-container ${isFullscreen ? 'fullscreen-active' : ''} ${showControls ? '' : 'controls-hidden'}`}>
 
       {/* ─── Progress Bar (top) ─── */}
-      {settings.showBookProgress !== false && (
+      {settings.showBookProgress !== false && !isFullscreen && (
         <div className={`reader-progress-bar ${showControls ? 'visible' : 'hidden'}`}>
           <div className="reader-progress-fill" style={{ width: `${progressPercent}%` }} />
         </div>
@@ -758,7 +881,8 @@ const ReaderView = () => {
       </main>
 
       {/* ─── Floating Controls (auto-hide) ─── */}
-      <div className={`reader-controls ${showControls ? 'visible' : 'hidden'}`}>
+      {!isFullscreen && (
+        <div className={`reader-controls ${showControls ? 'visible' : 'hidden'}`}>
 
         {/* Top-left: Back + TOC */}
         <div className="ctrl-group ctrl-top-left">
@@ -782,11 +906,7 @@ const ReaderView = () => {
                 <Columns size={16} />
               </button>
             </Tooltip>
-            <Tooltip content={pdfNightMode ? 'Day Mode (N)' : 'Night Mode (N)'} position="bottom">
-              <button className="icon-btn-sm" onClick={togglePdfNightMode}>
-                {pdfNightMode ? <Sun size={16} /> : <Moon size={16} />}
-              </button>
-            </Tooltip>
+            {/* Removed redundant palette icon here */}
             {settings.enableHighlighting !== false && (
               <>
                 <Tooltip content="Highlight Selection (H)" position="bottom">
@@ -806,14 +926,30 @@ const ReaderView = () => {
             )}
             <div className="ctrl-divider" />
 
-            <div className="ctrl-brightness-group">
-              <Sun size={14} className="ctrl-brightness-icon" />
+            <div 
+              className="ctrl-brightness-group"
+              style={{ cursor: 'pointer' }}
+              onWheel={(e) => {
+                e.stopPropagation();
+                const current = settings.brightness || 100;
+                const delta = e.deltaY < 0 ? 5 : -5;
+                updateSettings({ brightness: Math.min(Math.max(current + delta, 50), 150) });
+              }}
+              onDoubleClick={handleBrightnessReset}
+              title={settings.enableBrightnessReset !== false ? `Double-click to reset brightness (${settings.brightnessResetValue || 100}%)` : 'Brightness Controls'}
+            >
+              <Sun 
+                size={14} 
+                className="ctrl-brightness-icon" 
+                onDoubleClick={handleBrightnessReset}
+              />
               <input
                 type="range"
                 min="50"
                 max="150"
                 value={settings.brightness || 100}
                 onChange={e => updateSettings({ brightness: parseInt(e.target.value) })}
+                onDoubleClick={handleBrightnessReset}
                 className="brightness-slider-mini"
               />
             </div>
@@ -825,6 +961,38 @@ const ReaderView = () => {
                 {isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
               </button>
             </Tooltip>
+            <Tooltip content="Settings" position="bottom">
+              <button className="icon-btn-sm" onClick={openSettingsWindow}>
+                <Settings size={16} />
+              </button>
+            </Tooltip>
+
+            <div className="ctrl-divider" />
+
+            <div className="palette-container" ref={paletteRef}>
+              <Tooltip content="Reading Mode / Palette" position="bottom">
+                <button 
+                  className={`icon-btn-sm ${showPalette ? 'active' : ''}`} 
+                  onClick={() => setShowPalette(!showPalette)}
+                >
+                  <Palette size={16} />
+                </button>
+              </Tooltip>
+
+              {showPalette && (
+                <div className="palette-tray animate-scale-in">
+                  {READER_MODES.map(m => (
+                    <div
+                      key={m.id}
+                      className={`palette-swatch ${settings.readerMode === m.id ? 'active' : ''}`}
+                      style={{ background: m.color }}
+                      onClick={() => handleSetMode(m)}
+                      title={m.label}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -895,7 +1063,8 @@ const ReaderView = () => {
             )}
           </div>
         </div>
-      </div>
+        </div>
+      )}
 
 
       {/* ─── Go To Page Popover ─── */}
@@ -932,8 +1101,8 @@ const ReaderView = () => {
           {dictQuery.loading ? (
             <p style={{ color: 'var(--ink-text-tertiary)' }}>Looking up meaning...</p>
           ) : dictQuery.error ? (
-            <p className="pos">{dictQuery.error}</p>
-          ) : dictQuery.data ? (
+            <p className="pos" style={{ fontStyle: 'normal', color: 'var(--ink-text-tertiary)' }}>{dictQuery.error}</p>
+          ) : dictQuery.data && dictQuery.data.meanings ? (
             <>
               {dictQuery.data.meanings[0] && (
                 <>
@@ -942,7 +1111,9 @@ const ReaderView = () => {
                 </>
               )}
             </>
-          ) : null}
+          ) : (
+            <p className="pos">No definition available.</p>
+          )}
         </div>
       )}
     </div>

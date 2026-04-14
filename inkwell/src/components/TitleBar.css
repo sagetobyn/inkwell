@@ -1,9 +1,12 @@
 .titlebar {
   height: 32px;
-  background: var(--ink-bg);
+  background: color-mix(in srgb, var(--ink-bg), transparent 5%);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   user-select: none;
   display: flex;
   align-items: center;
+  justify-content: flex-end; /* Shifting controls to the right for Windows users */
   position: relative;
   border-bottom: 1px solid var(--ink-border);
   flex-shrink: 0;
@@ -11,55 +14,53 @@
   transition: background var(--ink-transition-duration) ease;
 }
 
-.titlebar-controls {
-  display: flex;
-  gap: 8px;
-  padding: 0 12px;
-  z-index: 1001;
+/* ── Dedicated Drag Region ── */
+.titlebar-drag-region {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 150px; /* Leave space for controls on the right */
+  bottom: 0;
+  z-index: 1;
 }
 
-.control-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  border: none;
-  padding: 0;
+.titlebar-controls {
+  display: flex;
+  height: 100%;
+  z-index: 1002; /* Ensure controls are above drug region and title */
+  position: relative;
+}
+
+.control-btn {
+  width: 46px;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  cursor: default;
+  background: transparent;
+  border: none;
+  color: var(--ink-text-secondary);
+  cursor: pointer;
+  transition: all 0.2s var(--ease-out);
+  padding: 0;
+  opacity: 0.8;
+  -webkit-app-region: no-drag; /* CRITICAL: Force non-draggable on buttons */
   position: relative;
-  transition: filter 0.1s ease;
+  z-index: 1003;
 }
 
-.control-dot svg {
-  width: 7px;
-  height: 7px;
-  stroke: rgba(0, 0, 0, 0.6);
-  stroke-width: 1.5;
-  fill: none;
-  opacity: 0;
-  transition: opacity 0.15s var(--ease-out);
-}
-
-.titlebar-controls:hover .control-dot svg {
+.control-btn:hover {
+  background: rgba(128, 128, 128, 0.1);
+  color: var(--ink-text-primary);
   opacity: 1;
 }
 
-.control-dot.close { 
-  background: #ff5f57; 
-  border: 0.5px solid rgba(0, 0, 0, 0.1);
-}
-.control-dot.minimize { 
-  background: #febc2e; 
-  border: 0.5px solid rgba(0, 0, 0, 0.1);
-}
-.control-dot.maximize { 
-  background: #28c840; 
-  border: 0.5px solid rgba(0, 0, 0, 0.1);
+.control-btn.close:hover {
+  background: #e81123;
+  color: white;
 }
 
-.control-dot:active {
+.control-btn:active {
   filter: brightness(0.8);
 }
 
@@ -77,6 +78,8 @@
   color: var(--ink-text-tertiary);
   letter-spacing: 0.02em;
   opacity: 0.6;
+  pointer-events: none; /* Let drag events pass through to background drag region */
+  z-index: 2;
 }
 
 /* ── Hide title bar in fullscreen ── */

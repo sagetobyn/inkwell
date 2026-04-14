@@ -40,7 +40,7 @@ const SettingsView = () => {
   const {
     settings, updateSettings, addCategory, categories, removeCategory,
     clearThumbnailCache, theme, setTheme, shortcuts, updateShortcuts,
-    setCurrentView
+    setCurrentView, refreshLibrary
   } = useAppContext();
 
   const isSettingsWindow = React.useMemo(() => {
@@ -99,7 +99,7 @@ const SettingsView = () => {
         };
 
         const [h, s, l] = rgbToHsl(r, g, b);
-        
+
         // Compress and resize for background skin
         const bgCanvas = document.createElement('canvas');
         const bgCtx = bgCanvas.getContext('2d');
@@ -126,7 +126,7 @@ const SettingsView = () => {
           '--ink-primary': `hsl(${h}, ${Math.max(s, 60)}%, ${Math.max(l, 50)}%)`,
         };
 
-        updateSettings({ 
+        updateSettings({
           customTheme: customPalette,
           themeBackgroundImage: bgDataUrl, // Save as skin
           accentColor: { name: 'Customly Extracted', h: Math.round(h), s: Math.round(Math.max(s, 60)), l: Math.round(Math.max(l, 50)) }
@@ -230,15 +230,8 @@ const SettingsView = () => {
       {/* Header */}
       <header className="settings-header">
         <div className="settings-header-left">
-          <Tooltip content={isSettingsWindow ? "Close" : "Back to Library"}>
-            <button className="icon-btn" onClick={async () => {
-              if (isSettingsWindow) {
-                const { getCurrentWindow } = await import('@tauri-apps/api/window');
-                getCurrentWindow().close();
-              } else {
-                setCurrentView('library');
-              }
-            }}>
+          <Tooltip content="Back to Library">
+            <button className="icon-btn" onClick={() => setCurrentView('library')}>
               <ArrowLeft size={18} />
             </button>
           </Tooltip>
@@ -285,16 +278,21 @@ const SettingsView = () => {
                   <div className="theme-grid">
                     {[
                       { id: 'light', label: 'Light', color: '#f5f6f8' },
-                      { id: 'dark', label: 'Dark', color: '#1a1a1a' },
-                      { id: 'midnight', label: 'Midnight', color: '#000000' },
                       { id: 'sepia', label: 'Sepia', color: '#f4ecd8' },
                       { id: 'nord', label: 'Nord', color: '#2e3440' },
                       { id: 'sunset', label: 'Sunset', color: '#1a1a2e' },
+                      { id: 'matcha', label: 'Matcha', color: '#1b1e17' },
+                      { id: 'coffee', label: 'Coffee', color: '#1a1614' },
+                      { id: 'solarized', label: 'Solarized', color: '#002b36' },
+                      { id: 'ocean', label: 'Ocean', color: '#0d1b2a' },
+                      { id: 'rose', label: 'Rose', color: '#1e1a1b' },
+                      { id: 'midnight', label: 'Midnight', color: '#000000' },
+                      { id: 'oled', label: 'OLED', color: '#000000' },
                       { id: 'custom', label: 'Custom', icon: <Upload size={12} /> }
                     ].map(t => (
-                      <button 
-                        key={t.id} 
-                        className={`theme-preset-btn ${theme === t.id || theme === `theme-${t.id}` ? 'active' : ''}`} 
+                      <button
+                        key={t.id}
+                        className={`theme-preset-btn ${theme === t.id || theme === `theme-${t.id}` ? 'active' : ''}`}
                         onClick={() => {
                           if (t.id === 'custom') {
                             fileInputRef.current?.click();
@@ -310,11 +308,11 @@ const SettingsView = () => {
                       </button>
                     ))}
                   </div>
-                  <input 
-                    type="file" 
-                    ref={fileInputRef} 
-                    style={{ display: 'none' }} 
-                    accept="image/*" 
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    style={{ display: 'none' }}
+                    accept="image/*"
                     onChange={handleCustomThemeUpload}
                   />
                 </SettingRow>
@@ -382,9 +380,9 @@ const SettingsView = () => {
                       { id: 'serif', label: 'Serif' },
                       { id: 'mono', label: 'Mono' }
                     ].map(f => (
-                      <button 
-                        key={f.id} 
-                        className={`theme-btn ${settings.fontFamily === f.id ? 'active' : ''}`} 
+                      <button
+                        key={f.id}
+                        className={`theme-btn ${settings.fontFamily === f.id ? 'active' : ''}`}
                         onClick={() => updateSettings({ fontFamily: f.id })}
                       >
                         {f.label}
@@ -454,6 +452,26 @@ const SettingsView = () => {
                   </div>
                 </SettingRow>
 
+                <SettingRow label="Enable Double-Click Reset" description="Double-clicking the brightness slider snaps it to a preset level.">
+                  <Toggle checked={settings.enableBrightnessReset !== false} onChange={v => updateSettings({ enableBrightnessReset: v })} />
+                </SettingRow>
+
+                {settings.enableBrightnessReset !== false && (
+                  <SettingRow label="Reset Brightness Level" description={`Target: ${settings.brightnessResetValue || 100}%`}>
+                    <div className="slider-container">
+                      <input
+                        type="range"
+                        className="slider-track"
+                        min={50}
+                        max={150}
+                        value={settings.brightnessResetValue || 100}
+                        onChange={e => updateSettings({ brightnessResetValue: parseInt(e.target.value, 10) })}
+                      />
+                      <span className="slider-value mono">{settings.brightnessResetValue || 100}%</span>
+                    </div>
+                  </SettingRow>
+                )}
+
                 {settings.nightModeType === 'sepia' && (
                   <SettingRow label="Sepia Warmth" description={`${settings.sepiaWarmth || 50}%`}>
                     <div className="slider-container">
@@ -507,9 +525,9 @@ const SettingsView = () => {
                       { id: 'on_scroll', label: 'On Scroll' },
                       { id: 'always', label: 'Always' }
                     ].map(m => (
-                      <button 
-                        key={m.id} 
-                        className={`theme-btn ${settings.readerZenMode === m.id ? 'active' : ''}`} 
+                      <button
+                        key={m.id}
+                        className={`theme-btn ${settings.readerZenMode === m.id ? 'active' : ''}`}
                         onClick={() => updateSettings({ readerZenMode: m.id })}
                       >
                         {m.label}
@@ -521,9 +539,9 @@ const SettingsView = () => {
                 <SettingRow label="Transition Speed" description="Adjust the speed of page turns and UI animations.">
                   <div className="theme-toggle-group">
                     {['fast', 'normal', 'slow'].map(s => (
-                      <button 
-                        key={s} 
-                        className={`theme-btn ${settings.transitionSpeed === s ? 'active' : ''}`} 
+                      <button
+                        key={s}
+                        className={`theme-btn ${settings.transitionSpeed === s ? 'active' : ''}`}
                         onClick={() => updateSettings({ transitionSpeed: s })}
                       >
                         {s.charAt(0).toUpperCase() + s.slice(1)}
@@ -711,9 +729,9 @@ const SettingsView = () => {
                       { id: 'recent', label: 'Recent' },
                       { id: 'resume', label: 'Resume Last' }
                     ].map(p => (
-                      <button 
-                        key={p.id} 
-                        className={`theme-btn ${settings.startupPage === p.id ? 'active' : ''}`} 
+                      <button
+                        key={p.id}
+                        className={`theme-btn ${settings.startupPage === p.id ? 'active' : ''}`}
                         onClick={() => updateSettings({ startupPage: p.id })}
                       >
                         {p.label}
@@ -731,8 +749,8 @@ const SettingsView = () => {
                       <h4 className="danger-zone-label">Clear Thumbnail Cache</h4>
                       <p className="danger-zone-desc">Deletes all generated book covers. They will be recreated on next visit.</p>
                     </div>
-                    <button 
-                      className="btn-surface" 
+                    <button
+                      className="btn-surface"
                       onClick={async () => {
                         if (window.confirm('Are you sure? This will delete all generated thumbnails.')) {
                           await clearThumbnailCache();
@@ -749,8 +767,8 @@ const SettingsView = () => {
                       <h4 className="danger-zone-label">Force Library Sync</h4>
                       <p className="danger-zone-desc">Manually rescan all mapped folders for new or removed books.</p>
                     </div>
-                    <button 
-                      className="btn-surface" 
+                    <button
+                      className="btn-surface"
                       onClick={() => {
                         refreshLibrary();
                         addToast('Syncing library...', 'info');
@@ -809,3 +827,4 @@ const SettingsView = () => {
 };
 
 export default SettingsView;
+
