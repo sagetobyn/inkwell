@@ -1,0 +1,85 @@
+.titlebar {
+  height: 32px;
+  background: var(--ink-bg);
+  user-select: none;
+  display: flex;
+  align-items: center;
+  position: relative;
+  border-bottom: 1px solid var(--ink-border);
+  flex-shrink: 0;
+  z-index: 1000;
+  transition: background var(--ink-transition-duration) ease;
+}
+
+.titlebar-controls {
+  display: flex;
+  gap: 8px;
+  padding: 0 12px;
+  z-index: 1001;
+}
+
+.control-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+  position: relative;
+  transition: filter 0.1s ease;
+}
+
+.control-dot svg {
+  width: 7px;
+  height: 7px;
+  stroke: rgba(0, 0, 0, 0.6);
+  stroke-width: 1.5;
+  fill: none;
+  opacity: 0;
+  transition: opacity 0.15s var(--ease-out);
+}
+
+.titlebar-controls:hover .control-dot svg {
+  opacity: 1;
+}
+
+.control-dot.close { 
+  background: #ff5f57; 
+  border: 0.5px solid rgba(0, 0, 0, 0.1);
+}
+.control-dot.minimize { 
+  background: #febc2e; 
+  border: 0.5px solid rgba(0, 0, 0, 0.1);
+}
+.control-dot.maximize { 
+  background: #28c840; 
+  border: 0.5px solid rgba(0, 0, 0, 0.1);
+}
+
+.control-dot:active {
+  filter: brightness(0.8);
+}
+
+.titlebar-title {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-text-tertiary);
+  letter-spacing: 0.02em;
+  opacity: 0.6;
+}
+
+/* ── Hide title bar in fullscreen ── */
+.fullscreen-active .titlebar {
+  display: none;
+}

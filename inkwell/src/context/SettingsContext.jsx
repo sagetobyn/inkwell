@@ -19,6 +19,7 @@ export const SettingsProvider = ({ children }) => {
     fullscreen: 'Enter', nextpage: 'ArrowRight', prevPage: 'ArrowLeft',
     zoomIn: '+', zoomOut: '-', toggleToc: 't', toggleNightMode: 'n',
     goToPage: 'g', backToLibrary: 'Escape', commandPalette: 'k',
+    saveHighlight: 'h', removeHighlight: 'x',
   };
 
   const defaultSettings = {
@@ -31,7 +32,8 @@ export const SettingsProvider = ({ children }) => {
     showBookProgress: true, showLibraryStats: true, showHeroSection: true,
     showRecentSection: true, glassIntensity: 0.7, glassBlur: 16, fontFamily: 'sans',
     enable3DEffects: true, libraryGridSize: 1.0, readerZenMode: 'off',
-    transitionSpeed: 'normal', startupPage: 'library',
+    transitionSpeed: 'normal', startupPage: 'library', spaceToScroll: true,
+    readerScrollStep: 0.8,
   };
 
   const [settings, setSettings] = useState(defaultSettings);

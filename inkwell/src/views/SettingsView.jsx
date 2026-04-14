@@ -219,6 +219,10 @@ const SettingsView = () => {
     goToPage: 'Go to Page',
     backToLibrary: 'Back to Library',
     commandPalette: 'Command Palette',
+    saveHighlight: 'Highlight Selection',
+    removeHighlight: 'Remove Highlight',
+    brightnessUp: 'Increase Brightness',
+    brightnessDown: 'Decrease Brightness',
   };
 
   return (
@@ -335,33 +339,7 @@ const SettingsView = () => {
                   </div>
                 </SettingRow>
 
-                <SettingRow label="UI Density" description="Adjust the spacing of interface elements.">
-                  <div className="theme-toggle-group">
-                    {['compact', 'comfortable', 'spacious'].map(d => (
-                      <button key={d} className={`theme-btn ${settings.uiDensity === d ? 'active' : ''}`} onClick={() => updateSettings({ uiDensity: d })}>
-                        {d.charAt(0).toUpperCase() + d.slice(1)}
-                      </button>
-                    ))}
-                  </div>
-                </SettingRow>
 
-                <SettingRow label="Animations" description="Enable or disable interface animations.">
-                  <Toggle checked={settings.animationsEnabled !== false} onChange={v => updateSettings({ animationsEnabled: v })} />
-                </SettingRow>
-
-                <SettingRow label="Background Pattern" description="Pattern behind PDF pages while reading.">
-                  <div className="theme-toggle-group">
-                    {['none', 'dots', 'grid'].map(p => (
-                      <button key={p} className={`theme-btn ${settings.bgPattern === p ? 'active' : ''}`} onClick={() => updateSettings({ bgPattern: p })}>
-                        {p.charAt(0).toUpperCase() + p.slice(1)}
-                      </button>
-                    ))}
-                  </div>
-                </SettingRow>
-
-                <SettingRow label="Gradient Mesh" description="Animated background effect in the library.">
-                  <Toggle checked={settings.gradientMesh !== false} onChange={v => updateSettings({ gradientMesh: v })} />
-                </SettingRow>
 
                 <hr className="divider" />
                 <div className="section-subtitle">Glassmorphism</div>
@@ -552,6 +530,29 @@ const SettingsView = () => {
                       </button>
                     ))}
                   </div>
+                </SettingRow>
+
+                <SettingRow label="Space to Scroll" description="Use Space/Shift+Space to scroll page down/up.">
+                  <Toggle checked={settings.spaceToScroll !== false} onChange={v => updateSettings({ spaceToScroll: v })} />
+                </SettingRow>
+
+                <SettingRow label="Scroll Amount (Space)" description={`${Math.round((settings.readerScrollStep || 0.8) * 100)}% of screen height.`}>
+                  <div className="slider-container">
+                    <input
+                      type="range"
+                      className="slider-track"
+                      min={10}
+                      max={100}
+                      step={5}
+                      value={Math.round((settings.readerScrollStep || 0.8) * 100)}
+                      onChange={e => updateSettings({ readerScrollStep: parseInt(e.target.value, 10) / 100 })}
+                    />
+                    <span className="slider-value mono">{Math.round((settings.readerScrollStep || 0.8) * 100)}%</span>
+                  </div>
+                </SettingRow>
+
+                <SettingRow label="Enable Highlighting" description="Show highlight and eraser tools in the reader.">
+                  <Toggle checked={settings.enableHighlighting !== false} onChange={v => updateSettings({ enableHighlighting: v })} />
                 </SettingRow>
               </div>
             )}

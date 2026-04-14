@@ -167,7 +167,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-2) 0;
+  padding: 0.35rem 0;
   gap: var(--space-4);
   border-bottom: 1px solid var(--ink-border);
 }
@@ -182,14 +182,14 @@
 }
 
 .setting-label {
-  font-size: var(--font-sm);
-  font-weight: 600;
+  font-size: var(--font-xs);
+  font-weight: 500;
+  color: var(--ink-text-primary);
 }
 
 .setting-desc {
-  font-size: var(--font-xs);
+  font-size: var(--font-2xs);
   color: var(--ink-text-tertiary);
-  margin-top: 0.125rem;
 }
 
 .setting-control {
@@ -312,15 +312,17 @@
 
 /* ── Shortcut Key Button ── */
 .shortcut-key-btn {
-  min-width: 100px;
+  min-width: 80px;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-md);
   border: 1px solid var(--ink-border);
   background: var(--ink-surface-2);
   transition: all var(--transition-fast);
+  font-size: var(--font-2xs);
+  font-family: var(--font-mono);
 }
 
 .shortcut-key-btn:hover {

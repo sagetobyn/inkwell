@@ -1,13 +1,21 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
+import { convertFileSrc } from '@tauri-apps/api/core';
+import { revealItemInDir } from '@tauri-apps/plugin-opener';
 import pdfWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker.mjs?url';
 import 'pdfjs-dist/legacy/web/pdf_viewer.css';
 
 // Configure the worker. Using Vite's ?url syntax ensures it's correctly bundled and served.
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
-const PdfRenderer = ({ filePath, scale = 1.0, pageNumber = 1, showGlow = true, onPageLoad, filter }) => {
+const PdfRenderer = ({ 
+  filePath, scale = 1.0, pageNumber = 1, 
+  showGlow = true, onPageLoad, filter,
+  onHighlightClick, selectedHighlight 
+}) => {
   const canvasRef = useRef(null);
+  const textLayerRef = useRef(null);
+  const annoLayerRef = useRef(null);
   const renderTaskRef = useRef(null);
   const textLayerTaskRef = useRef(null); // Reference to track the TextLayer instance
   const [pdfDoc, setPdfDoc] = useState(null);
@@ -18,7 +26,7 @@ const PdfRenderer = ({ filePath, scale = 1.0, pageNumber = 1, showGlow = true, o
   // --- Phase 11: Granite Base (Synchronous Stability) ---
   // We store the 'Original' (unscaled) dimensions so we can calculate
   // the 'Display' (scaled) dimensions SYNCHRONOUSLY based on props.
-  const [originalDim, setOriginalDim] = useState({ width: 612, height: 792 });
+  const [originalDim, setOriginalDim] = useState({ width: 612, height: 792, ox: 0, oy: 0 });
   const displayDim = useMemo(() => ({
     width: Math.floor(originalDim.width * scale),
     height: Math.floor(originalDim.height * scale)
@@ -59,8 +67,10 @@ const PdfRenderer = ({ filePath, scale = 1.0, pageNumber = 1, showGlow = true, o
             loadingTask = pdfjsLib.getDocument({ data: fileData, ...pdfOptions });
           } catch (fsError) {
             console.error("Tauri FS error, falling back locally:", fsError);
-            setErrorMsg(`Tauri FS Error: ${fsError.message || JSON.stringify(fsError)}`);
-            loadingTask = pdfjsLib.getDocument({ url: filePath, ...pdfOptions });
+            // Use Tauri's asset protocol for fallback
+            const normalizedPath = filePath.replace(/\\/g, '/');
+            const assetUrl = convertFileSrc(normalizedPath);
+            loadingTask = pdfjsLib.getDocument({ url: assetUrl, ...pdfOptions });
           }
         }
 
@@ -107,8 +117,16 @@ const PdfRenderer = ({ filePath, scale = 1.0, pageNumber = 1, showGlow = true, o
         // This ensures the SYNCHRONOUS displayDim calculation in the render body
         // is always using the most accurate unscaled dimensions.
         const standardViewport = page.getViewport({ scale: 1 });
-        if (originalDim.width !== standardViewport.width || originalDim.height !== standardViewport.height) {
-          setOriginalDim({ width: standardViewport.width, height: standardViewport.height });
+        if (originalDim.width !== standardViewport.width || 
+            originalDim.height !== standardViewport.height ||
+            originalDim.ox !== standardViewport.viewBox[0] ||
+            originalDim.oy !== standardViewport.viewBox[1]) {
+          setOriginalDim({ 
+            width: standardViewport.width, 
+            height: standardViewport.height,
+            ox: standardViewport.viewBox[0],
+            oy: standardViewport.viewBox[1]
+          });
         }
 
         const viewport = page.getViewport({ scale });
@@ -144,20 +162,20 @@ const PdfRenderer = ({ filePath, scale = 1.0, pageNumber = 1, showGlow = true, o
 
         // --- Phase 8: Precision Manual Overlay (Mathematical Fit) ---
         const textContent = await page.getTextContent();
-        const textLayerContainer = document.createElement('div');
-        textLayerContainer.className = 'textLayer';
+        const textLayer = textLayerRef.current;
+        if (!textLayer) return;
 
+        // Clear existing
+        textLayer.innerHTML = '';
+        
         // Match CSS dimensions exactly to the viewport
-        textLayerContainer.style.width = canvas.style.width;
-        textLayerContainer.style.height = canvas.style.height;
-        textLayerContainer.style.position = 'absolute';
-        textLayerContainer.style.top = '0';
-        textLayerContainer.style.left = '0';
-        textLayerContainer.style.pointerEvents = 'auto'; // Ensure interactive selection
-
-        const wrapper = canvas.parentElement;
-        wrapper.querySelectorAll('.textLayer').forEach(el => el.remove());
-        wrapper.appendChild(textLayerContainer);
+        textLayer.style.width = `${viewport.width}px`;
+        textLayer.style.height = `${viewport.height}px`;
+        textLayer.style.position = 'absolute';
+        textLayer.style.top = '0';
+        textLayer.style.left = '0';
+        textLayer.style.pointerEvents = 'auto'; // Ensure interactive selection
+        textLayer.style.display = 'block';
 
         // Track tasks for cleanup
         if (textLayerTaskRef.current) {
@@ -208,7 +226,7 @@ const PdfRenderer = ({ filePath, scale = 1.0, pageNumber = 1, showGlow = true, o
           } else {
             // --- FINAL LINE STRETCH ---
             // Ensure the last line covers the rest of the page to prevent selection resets.
-            const containerHeight = parseFloat(textLayerContainer.style.height) || viewport.height;
+            const containerHeight = parseFloat(textLayer.style.height) || viewport.height;
             lineHeightPx = Math.max(line.fontHeight * 1.5, containerHeight - lineTop);
           }
 
@@ -234,10 +252,14 @@ const PdfRenderer = ({ filePath, scale = 1.0, pageNumber = 1, showGlow = true, o
             span.setAttribute('data-page', pageNumber);
             
             // Positioning relative to line container
-            // We align based on the item's baseline minus its font height
-            const itemTop = item.tx[5] - item.fontHeight * 0.8;
+            // We expand the span to cover the full line height to eliminate "dead zones" during selection.
+            const itemTopOffset = item.tx[5] - item.fontHeight * 0.8;
             span.style.left = `${item.tx[4]}px`;
-            span.style.top = `${itemTop - lineTop}px`;
+            span.style.top = '0';
+            span.style.height = '100%';
+            span.style.paddingTop = `${itemTopOffset - lineTop}px`;
+            span.style.boxSizing = 'border-box';
+            
             span.style.fontSize = `${item.fontHeight}px`;
             span.style.fontFamily = 'serif, sans-serif'; 
             span.style.position = 'absolute';
@@ -247,22 +269,71 @@ const PdfRenderer = ({ filePath, scale = 1.0, pageNumber = 1, showGlow = true, o
             span.style.transformOrigin = '0 0';
             span.style.cursor = 'text';
 
-            // ScaleX calculation
+            // Precise scaleX calculation for visual alignment
+            measureCtx.font = `${item.fontHeight}px serif`;
             const targetWidth = item.width * viewport.scale;
             const measuredWidth = measureCtx.measureText(item.str).width;
             if (measuredWidth > 0 && targetWidth > 0) {
-              span.style.transform = `scaleX(${targetWidth / (measuredWidth * (item.fontHeight / item.fontHeight))})`;
-              // (Actually scale is just targetWidth / measuredWidth at fontHeight)
-              // But we already measured at line.fontHeight? No, let's just do it right.
-              measureCtx.font = `${item.fontHeight}px serif`;
-              const preciseMeasuredWidth = measureCtx.measureText(item.str).width;
-              span.style.transform = `scaleX(${targetWidth / preciseMeasuredWidth})`;
+              span.style.transform = `scaleX(${targetWidth / measuredWidth})`;
             }
 
             lineDiv.appendChild(span);
           });
-          textLayerContainer.appendChild(lineDiv);
+          textLayer.appendChild(lineDiv);
         });
+        
+        // --- Phase 10: Annotation Layer (Interactive Highlights) ---
+        const annots = await page.getAnnotations();
+        const annoLayer = annoLayerRef.current;
+        if (annoLayer && active) {
+          annoLayer.innerHTML = '';
+          annoLayer.style.width = `${viewport.width}px`;
+          annoLayer.style.height = `${viewport.height}px`;
+          
+          annots.filter(a => a.subtype === 'Highlight').forEach(anno => {
+            const pdfRect = anno.rect; // [x1, y1, x2, y2] in PDF points
+            const rect = viewport.convertToViewportRectangle(pdfRect);
+            
+            const overlay = document.createElement('div');
+            overlay.className = 'pdf-anno-overlay';
+            
+            // Highlight specific styling
+            const color = anno.color ? `rgba(${anno.color[0]}, ${anno.color[1]}, ${anno.color[2]}, 0.2)` : 'rgba(255, 226, 0, 0.2)';
+            
+            overlay.style.position = 'absolute';
+            overlay.style.left = `${rect[0]}px`;
+            overlay.style.top = `${rect[1]}px`;
+            overlay.style.width = `${rect[2] - rect[0]}px`;
+            overlay.style.height = `${rect[3] - rect[1]}px`;
+            overlay.style.backgroundColor = color;
+            overlay.style.cursor = 'pointer';
+            overlay.style.pointerEvents = 'auto';
+            overlay.style.zIndex = '3';
+            
+            // Selection state
+            const isSelected = selectedHighlight && 
+                              selectedHighlight.page === pageNumber && 
+                              selectedHighlight.rect.every((v, i) => Math.abs(v - pdfRect[i]) < 0.1);
+            
+            if (isSelected) {
+              overlay.classList.add('selected');
+            }
+            
+            overlay.onclick = (e) => {
+              e.stopPropagation();
+              if (onHighlightClick) {
+                onHighlightClick({
+                  page: pageNumber,
+                  rect: pdfRect,
+                  color: anno.color,
+                  id: anno.id
+                });
+              }
+            };
+            
+            annoLayer.appendChild(overlay);
+          });
+        }
 
         // Notify parent about page load
         if (onPageLoad) onPageLoad(page, viewport, pdfDoc.numPages);
@@ -302,6 +373,22 @@ const PdfRenderer = ({ filePath, scale = 1.0, pageNumber = 1, showGlow = true, o
         <div className="pdf-error-card">
           <div className="pdf-error-icon">!</div>
           <p className="pdf-error-msg">{errorMsg}</p>
+          {filePath && /^[a-zA-Z]:/.test(filePath) && (
+            <button
+              className="pdf-error-action-btn"
+              onClick={async () => {
+                try {
+                  const root = filePath.split(':')[0] + ':';
+                  console.log(`[Diagnostic] Attempting to wake/re-mount drive at: ${root}`);
+                  await revealItemInDir(filePath);
+                } catch (err) {
+                  console.error("Wake drive failed:", err);
+                }
+              }}
+            >
+              Wake Drive (Google Drive / Cloud)
+            </button>
+          )}
         </div>
       )}
 
@@ -315,6 +402,10 @@ const PdfRenderer = ({ filePath, scale = 1.0, pageNumber = 1, showGlow = true, o
       {/* Canvas Wrapper (perfectly sized to viewport) */}
       <div
         className="pdf-viewport-wrapper"
+        data-pdf-pw={originalDim.width}
+        data-pdf-ph={originalDim.height}
+        data-pdf-ox={originalDim.ox}
+        data-pdf-oy={originalDim.oy}
         style={{
           position: 'relative',
           width: displayDim.width ? `${displayDim.width}px` : `${Math.round(612 * scale)}px`,
@@ -335,6 +426,29 @@ const PdfRenderer = ({ filePath, scale = 1.0, pageNumber = 1, showGlow = true, o
             position: 'absolute',
             top: 0,
             left: 0,
+          }}
+        />
+        <div 
+          ref={textLayerRef}
+          className="textLayer"
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            zIndex: 3,
+            userSelect: 'text',
+            pointerEvents: 'auto'
+          }}
+        />
+        <div 
+          ref={annoLayerRef}
+          className="annoLayer"
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            zIndex: 2,
+            pointerEvents: 'none' // children (overlays) will have pointerEvents: auto
           }}
         />
       </div>

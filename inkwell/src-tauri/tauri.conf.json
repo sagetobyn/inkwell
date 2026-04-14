@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "inkwell",
-  "version": "0.1.0",
-  "identifier": "com.robin.inkwell",
+  "productName": "Inkwell Reader",
+  "version": "0.2.0",
+  "identifier": "com.robin.inkwell.v2",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -13,10 +13,11 @@
     "windows": [
       {
         "label": "main",
-        "title": "inkwell",
+        "title": "Inkwell Reader",
         "width": 800,
         "height": 600,
-        "visible": false
+        "visible": false,
+        "decorations": false
       }
     ],
     "security": {

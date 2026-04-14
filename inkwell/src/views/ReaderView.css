@@ -515,3 +515,21 @@
   cursor: pointer;
   border: 1px solid var(--ink-bg);
 }
+/* ── Background Patterns ── */
+.bg-pattern-dots {
+  background-image: radial-gradient(var(--ink-border) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+.bg-pattern-grid {
+  background-image: 
+    linear-gradient(var(--ink-border) 1px, transparent 1px), 
+    linear-gradient(90deg, var(--ink-border) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/* Ensure patterns are visible but not overwhelming */
+.reader-content.bg-pattern-dots,
+.reader-content.bg-pattern-grid {
+  background-attachment: fixed;
+}

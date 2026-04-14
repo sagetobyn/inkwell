@@ -555,6 +555,10 @@ const LibraryView = () => {
           </div>
 
           <div className="lib-header-right">
+            <button className="btn-primary" onClick={importPDF}>
+              <Plus size={16} />
+              <span>Import</span>
+            </button>
             <Tooltip content="Settings">
               <button className="icon-btn" onClick={openSettingsWindow}>
                 <Settings size={18} />
@@ -635,7 +639,7 @@ const LibraryView = () => {
           </aside>
 
           {/* ─── Content ─── */}
-          <main className={`lib-content ${settings.gradientMesh !== false ? 'gradient-mesh-bg' : ''}`}>
+          <main className="lib-content">
             {/* ─── Content Header ─── */}
             <div className="content-toolbar">
               <div className="content-toolbar-left">

@@ -33,6 +33,9 @@ export const AppProvider = ({ children }) => {
     backToLibrary: 'Escape',
     commandPalette: 'k',
     saveHighlight: 'h',
+    removeHighlight: 'x',
+    brightnessUp: ']',
+    brightnessDown: '[',
   };
 
   const defaultSettings = {
@@ -72,6 +75,7 @@ export const AppProvider = ({ children }) => {
     showThemeBackgroundImage: false,
     themeBackgroundImage: null,  // DataURL
     showDashboard: true,         // Migrated from local state
+    enableHighlighting: true,    // Whether to show highlight/eraser actions
   };
 
   /* ───────── State ───────── */
@@ -407,7 +411,15 @@ export const AppProvider = ({ children }) => {
         if (Array.isArray(s_imported)) setImportedBooks(s_imported);
         if (Array.isArray(s_allBooks)) setAllBooks(s_allBooks);
         if (s_progress) setBookProgress(s_progress);
-        if (s_shortcuts) setShortcuts({ ...defaultShortcuts, ...s_shortcuts });
+        if (s_shortcuts) {
+          // Filter out legacy shortcuts that are no longer in defaults
+          const validKeys = Object.keys(defaultShortcuts);
+          const filtered = Object.keys(s_shortcuts).reduce((acc, key) => {
+            if (validKeys.includes(key)) acc[key] = s_shortcuts[key];
+            return acc;
+          }, {});
+          setShortcuts({ ...defaultShortcuts, ...filtered });
+        }
         if (s_pdfMode !== null && s_pdfMode !== undefined) setPdfNightMode(s_pdfMode);
         if (s_theme) setTheme(s_theme);
         if (s_settings) setSettings(prev => ({ ...prev, ...s_settings }));
@@ -632,7 +644,7 @@ export const AppProvider = ({ children }) => {
           resizable: true,
           minimizable: true,
           maximizable: true,
-          decorations: true,
+          decorations: false,
           center: true,
           dragDropEnabled: false,
         });
@@ -655,11 +667,13 @@ export const AppProvider = ({ children }) => {
     await immediateStoreSave('shortcuts', newShortcuts);
   };
 
-  const togglePdfNightMode = async () => {
-    const newVal = !pdfNightMode;
-    setPdfNightMode(newVal);
-    await immediateStoreSave('pdfNightMode', newVal);
-  };
+  const togglePdfNightMode = useCallback(async () => {
+    setPdfNightMode(prev => {
+      const newVal = !prev;
+      immediateStoreSave('pdfNightMode', newVal);
+      return newVal;
+    });
+  }, [immediateStoreSave]);
 
   const updateTheme = async (newTheme) => {
     setTheme(newTheme);

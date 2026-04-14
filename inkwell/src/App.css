@@ -28,16 +28,7 @@
   width: 100%;
 }
 
-/* ── Density variants ── */
-[data-density="compact"] {
-  --header-height: 44px;
-  --status-bar-height: 24px;
-}
 
-[data-density="spacious"] {
-  --header-height: 60px;
-  --status-bar-height: 32px;
-}
 
 /* ── Premium View Transitions ── */
 .view-transition {

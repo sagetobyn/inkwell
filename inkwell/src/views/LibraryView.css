@@ -498,21 +498,26 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  background: var(--ink-primary);
-  color: var(--ink-text-on-accent);
-  padding: 0.6rem 1.5rem;
+  background: hsla(var(--ink-accent-h), var(--ink-accent-s), var(--ink-accent-l), 0.15);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: var(--ink-text-primary);
+  padding: 0.65rem 1.8rem;
   border-radius: var(--radius-full);
   font-size: var(--font-sm);
-  font-weight: 600;
-  box-shadow: var(--shadow-glow), var(--shadow-2);
-  transition: all var(--transition-fast);
+  font-weight: 700;
+  border: 1px solid hsla(var(--ink-accent-h), var(--ink-accent-s), var(--ink-accent-l), 0.35);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  transition: all var(--transition-normal);
   margin-top: var(--space-2);
   width: fit-content;
 }
 
 .hero-resume-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 0 30px var(--ink-primary-glow), var(--shadow-3);
+  background: hsla(var(--ink-accent-h), var(--ink-accent-s), var(--ink-accent-l), 0.25);
+  border-color: hsla(var(--ink-accent-h), var(--ink-accent-s), var(--ink-accent-l), 0.6);
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 0 30px hsla(var(--ink-accent-h), var(--ink-accent-s), var(--ink-accent-l), 0.2);
 }
 
 .hero-resume-btn:active {
@@ -1228,4 +1233,82 @@
 
 .pin-icon-fixed {
   flex-shrink: 0;
+}
+/* ── Inline Editing ── */
+.inline-edit-input {
+  all: unset;
+  background: var(--ink-surface-2);
+  border: 1px solid var(--ink-primary);
+  border-radius: var(--radius-xs);
+  padding: 0 var(--space-1);
+  margin-right: var(--space-2);
+  min-width: 120px;
+  color: var(--ink-text-primary);
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  outline: none;
+  box-shadow: 0 0 0 3px var(--ink-primary-muted);
+}
+
+.sidebar-edit {
+  background: var(--ink-bg);
+  flex: 1;
+  min-width: 0;
+  margin-right: var(--space-2);
+}
+
+.subfolder-header .inline-edit-input {
+  background: var(--ink-bg);
+  font-size: var(--font-sm);
+  font-weight: 600;
+}
+
+/* ── Folder Creation UI ── */
+.sidebar-item-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.sidebar-item:hover .sidebar-item-actions {
+  opacity: 1;
+}
+
+.sidebar-item-action {
+  all: unset;
+  display: flex;
+  padding: 4px;
+  border-radius: var(--radius-xs);
+  color: var(--ink-text-tertiary);
+  transition: all var(--duration-fast);
+  cursor: pointer;
+}
+
+.sidebar-item-action:hover {
+  background: var(--ink-surface-1);
+  color: var(--ink-primary);
+}
+
+.header-action-btn {
+  all: unset;
+  display: flex;
+  padding: 4px;
+  border-radius: var(--radius-xs);
+  color: var(--ink-text-tertiary);
+  opacity: 0;
+  transition: all var(--duration-fast);
+  cursor: pointer;
+  margin-left: var(--space-1);
+}
+
+.subfolder-header:hover .header-action-btn {
+  opacity: 1;
+}
+
+.header-action-btn:hover {
+  background: var(--ink-surface-0);
+  color: var(--ink-primary);
 }

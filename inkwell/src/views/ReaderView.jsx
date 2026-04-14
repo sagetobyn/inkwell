@@ -5,7 +5,7 @@ import Tooltip from '../components/Tooltip';
 import {
   ArrowLeft, ZoomIn, ZoomOut, Maximize, Minimize,
   Moon, Sun, ChevronLeft,
-  ChevronRight, Columns, Minus, Type, Highlighter, Check
+  ChevronRight, Columns, Minus, Type, Highlighter, Check, Eraser
 } from 'lucide-react';
 import InfiniteScrollReader from '../components/InfiniteScrollReader';
 import PdfRenderer from '../components/PdfRenderer';
@@ -42,6 +42,7 @@ const ReaderView = () => {
   const goToPageRef = useRef(null);
 
   const bookPath = currentBook?.path || null;
+  const [selectedHighlight, setSelectedHighlight] = useState(null);
 
   // Progress percentage
   const progressPercent = totalPages > 0 ? Math.round((page / totalPages) * 100) : 0;
@@ -150,15 +151,17 @@ const ReaderView = () => {
     const handleScroll = () => {
       if (settings.readerZenMode === 'on_scroll') {
         setShowControls(false);
+      } else if (settings.readerZenMode === 'off') {
+        resetControlsTimer();
       }
     };
 
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('scroll', handleScroll, true);
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('scroll', handleScroll, true);
     resetControlsTimer();
     return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('scroll', handleScroll, true);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('scroll', handleScroll, true);
       if (controlsTimeout.current) clearTimeout(controlsTimeout.current);
     };
   }, [resetControlsTimer, settings.readerZenMode]);
@@ -175,11 +178,63 @@ const ReaderView = () => {
       if (e.key === shortcuts.backToLibrary) { e.preventDefault(); updateBookProgress(currentBook?.path, page); closeBook(); }
       if (e.key === shortcuts.zoomIn || (e.ctrlKey && e.key === '=')) { e.preventDefault(); handleZoomIn(); }
       if (e.key === shortcuts.zoomOut || (e.ctrlKey && e.key === '-')) { e.preventDefault(); handleZoomOut(); }
-      if (e.key === shortcuts.saveHighlight) { e.preventDefault(); handleSaveHighlight(); }
+      
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        const selection = window.getSelection();
+        if (selection.isCollapsed && selectedHighlight) {
+          e.preventDefault();
+          handleEraseHighlight();
+        }
+      }
+      
+      if (e.key === shortcuts.brightnessUp) {
+        e.preventDefault();
+        const current = settings.brightness || 100;
+        updateSettings({ brightness: Math.min(current + 10, 150) });
+      }
+      if (e.key === shortcuts.brightnessDown) {
+        e.preventDefault();
+        const current = settings.brightness || 100;
+        updateSettings({ brightness: Math.max(current - 10, 50) });
+      }
+      
+      if (settings.enableHighlighting !== false) {
+        if (e.key === shortcuts.saveHighlight) { e.preventDefault(); handleSaveHighlight(); }
+        if (e.key === shortcuts.removeHighlight) { e.preventDefault(); handleRemoveHighlight(); }
+      }
+
+      if (settings.spaceToScroll !== false && (e.key === ' ' || e.code === 'Space')) {
+        e.preventDefault();
+        const container = infiniteScroll 
+          ? readerRef.current?.getScrollContainer() 
+          : contentRef.current;
+        
+        if (container) {
+          const atBottom = Math.ceil(container.scrollHeight - container.scrollTop) <= container.clientHeight + 5;
+          const atTop = container.scrollTop <= 5;
+
+          if (!e.shiftKey && atBottom && !infiniteScroll) {
+            // Next page in single-page mode
+            setPage(p => totalPages ? Math.min(p + 1, totalPages) : p + 1);
+            container.scrollTop = 0;
+          } else if (e.shiftKey && atTop && !infiniteScroll) {
+            // Previous page in single-page mode
+            setPage(p => Math.max(p - 1, 1));
+          } else {
+            // Standard scroll
+            const scrollStep = settings.readerScrollStep || 0.8;
+            const scrollAmount = container.clientHeight * scrollStep;
+            container.scrollBy({ 
+              top: e.shiftKey ? -scrollAmount : scrollAmount, 
+              behavior: 'smooth' 
+            });
+          }
+        }
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [shortcuts, dictQuery, page, totalPages, showGoToPage, bookPath]);
+  }, [shortcuts, dictQuery, page, totalPages, showGoToPage, bookPath, settings, togglePdfNightMode, selectedHighlight]);
 
   // ── Save Highlight to PDF Binary ─────────────────────────────────────────
   const handleSaveHighlight = async () => {
@@ -189,16 +244,11 @@ const ReaderView = () => {
       return;
     }
 
-    // 1. Find all spans within the selection that have PDF metadata
-    const selectedSpans = [];
-    document.querySelectorAll('.textLayer span[data-pdf-x]').forEach(span => {
-      if (selection.containsNode(span, true)) {
-        selectedSpans.push(span);
-      }
-    });
-
-    if (selectedSpans.length === 0) {
-      addToast('No text selected in the document', 'info');
+    const range = selection.getRangeAt(0);
+    const rects = Array.from(range.getClientRects());
+    
+    if (rects.length === 0) {
+      addToast('No selection found', 'info');
       return;
     }
 
@@ -206,72 +256,341 @@ const ReaderView = () => {
       setSaveStatus('saving');
       
       const { readFile, writeFile } = await import('@tauri-apps/plugin-fs');
-      const { PDFDocument, rgb, PDFName, PDFArray } = await import('pdf-lib');
+      const { PDFDocument, PDFName, PDFArray } = await import('pdf-lib');
 
       const existingPdfBytes = await readFile(currentBook.path);
       const pdfDoc = await PDFDocument.load(existingPdfBytes);
       const context = pdfDoc.context;
 
-      // Group spans by page
-      const spansByPage = selectedSpans.reduce((acc, span) => {
-        const p = parseInt(span.getAttribute('data-page'));
-        if (!acc[p]) acc[p] = [];
-        acc[p].push(span);
-        return acc;
-      }, {});
+      // 1. Group Rects by Span
+      // This ensures we never create multiple overlapping highlights for the same line segment.
+      const spanGroups = new Map();
+      for (const r of rects) {
+        // Find which span this rect belongs to using hit-testing at the center of the rect
+        const centerX = r.left + r.width / 2;
+        const centerY = r.top + r.height / 2;
+        const elementAtPoint = document.elementFromPoint(centerX, centerY);
+        const span = elementAtPoint?.closest('.textLayer span[data-page]');
+        
+        if (!span) continue;
+        if (!spanGroups.has(span)) spanGroups.set(span, []);
+        spanGroups.get(span).push(r);
+      }
 
-      for (const [pageNum, spans] of Object.entries(spansByPage)) {
-        const pageIndex = parseInt(pageNum) - 1;
+      // Group highlights by page for PDF-lib processing
+      const pageHighlights = {};
+
+      for (const [span, sRects] of spanGroups.entries()) {
+        const pageNum = parseInt(span.getAttribute('data-page'));
+        const pageWrapper = span.closest('.pdf-viewport-wrapper, .isr-page-wrapper');
+        if (!pageWrapper) continue;
+
+        // Calculate the Union Rect of all selection segments within this span
+        const unionRect = {
+          left: Math.min(...sRects.map(r => r.left)),
+          top: Math.min(...sRects.map(r => r.top)),
+          right: Math.max(...sRects.map(r => r.left + r.width)),
+          bottom: Math.max(...sRects.map(r => r.top + r.height))
+        };
+        unionRect.width = unionRect.right - unionRect.left;
+        unionRect.height = unionRect.bottom - unionRect.top;
+
+        const pageRect = pageWrapper.getBoundingClientRect();
+        const origWidth = parseFloat(pageWrapper.getAttribute('data-pdf-pw') || '612');
+        const origHeight = parseFloat(pageWrapper.getAttribute('data-pdf-ph') || '792');
+        const origOx = parseFloat(pageWrapper.getAttribute('data-pdf-ox') || '0');
+        const origOy = parseFloat(pageWrapper.getAttribute('data-pdf-oy') || '0');
+
+        const scaleX = pageRect.width / origWidth;
+        const scaleY = pageRect.height / origHeight;
+
+        // Use the FULL browser selection box height to match 'native selection' look
+        const dh = unionRect.height / scaleY;
+        const dw = unionRect.width / scaleX;
+        const dx = origOx + (unionRect.left - pageRect.left) / scaleX;
+        const dy_top = (unionRect.top - pageRect.top) / scaleY;
+
+        // PDF Y is bottom-up. Top-down 'dy_top' maps to 'origHeight - dy_top - dh'
+        const dy = origOy + (origHeight - dy_top - dh);
+
+        if (!pageHighlights[pageNum]) pageHighlights[pageNum] = [];
+        pageHighlights[pageNum].push({ x: dx, y: dy, w: dw, h: dh, span, unionRect });
+      }
+
+      let savedCount = 0;
+
+      for (const [pageNumStr, rawList] of Object.entries(pageHighlights)) {
+        const pageNum = parseInt(pageNumStr);
+        const pageIndex = pageNum - 1;
         if (pageIndex < 0 || pageIndex >= pdfDoc.getPageCount()) continue;
         
         const pdfPage = pdfDoc.getPage(pageIndex);
 
-        spans.forEach(span => {
-          const x = parseFloat(span.getAttribute('data-pdf-x'));
-          const y = parseFloat(span.getAttribute('data-pdf-y'));
-          const w = parseFloat(span.getAttribute('data-pdf-w'));
-          const h = parseFloat(span.getAttribute('data-pdf-h'));
+        // --- Phase 13: Vertical Snap (The Flush-Fit) ---
+        // Sort highlights from top to bottom (PDF Y is bottom-up, so sort descending)
+        rawList.sort((a, b) => b.y - a.y);
+        for (let i = 0; i < rawList.length - 1; i++) {
+          const current = rawList[i];
+          const next = rawList[i + 1];
+          const currentBottom = current.y;
+          const nextTop = next.y + next.h;
+          
+          // If they overlap or have a tiny gap (< 3pt), snap them together
+          const gap = nextTop - currentBottom;
+          if (gap > -2 && gap < 8) {
+            // Snap the current line's bottom to the next line's top
+            // To maintain the top of 'current', we must adjust both y and h
+            const shift = nextTop - current.y;
+            current.y = nextTop;
+            current.h -= shift; 
+          }
+        }
 
-          const rect = [x, y, x + w, y + h];
+        rawList.forEach(h => {
+          const rect = [h.x, h.y, h.x + h.w, h.y + h.h];
 
           const highlightAnnot = context.obj({
             Type: 'Annot',
             Subtype: 'Highlight',
             Rect: rect,
-            QuadPoints: [x, y+h, x+w, y+h, x, y, x+w, y],
-            C: [1, 0.9, 0.2],
+            QuadPoints: [h.x, h.y + h.h, h.x + h.w, h.y + h.h, h.x, h.y, h.x + h.w, h.y],
+            C: [1, 0.9, 0.2], // Yellow
             CA: 0.4,
           });
 
           const annotRef = context.register(highlightAnnot);
           
-          // --- FIXED LOOKUP TO AVOID "Expected PDFArray" ERROR ---
           let annots = pdfPage.node.lookup(PDFName.of('Annots'));
           if (!annots || !(annots instanceof PDFArray)) {
-            // Create new array if missing or not an array
             annots = context.obj([]);
             pdfPage.node.set(PDFName.of('Annots'), annots);
           }
           annots.push(annotRef);
 
-          span.classList.add('pdf-highlighted');
+          // Accurate UI feedback: Apply a partial background to the span using linear-gradient
+          // This avoids the "entire line" problem while keeping the DOM structure simple.
+          const sRect = h.span.getBoundingClientRect();
+          const pStart = Math.max(0, ((h.unionRect.left - sRect.left) / sRect.width) * 100);
+          const pEnd = Math.min(100, ((h.unionRect.right - sRect.left) / sRect.width) * 100);
+          
+          const highlightColor = 'rgba(255, 226, 0, 0.35)';
+          const currentBg = h.span.style.background || '';
+          const newHighlight = `linear-gradient(to right, transparent ${pStart}%, ${highlightColor} ${pStart}%, ${highlightColor} ${pEnd}%, transparent ${pEnd}%)`;
+          
+          h.span.style.background = currentBg ? `${currentBg}, ${newHighlight}` : newHighlight;
+          h.span.classList.add('pdf-highlighted-precise');
+          
+          savedCount++;
         });
       }
 
-      const pdfBytes = await pdfDoc.save();
-      await writeFile(currentBook.path, pdfBytes);
-      
-      setSaveStatus('success');
+      if (savedCount > 0) {
+        const pdfBytes = await pdfDoc.save();
+        await writeFile(currentBook.path, pdfBytes);
+        setSaveStatus('success');
+        // Trigger a "soft refresh" of annotations if the reader supports it
+        // For now, the UI gradients provide instant feedback.
+      } else {
+        addToast('No valid text areas found to highlight', 'info');
+        setSaveStatus('idle');
+      }
+
       selection.removeAllRanges();
-      
-      // Auto-reset status
       setTimeout(() => setSaveStatus('idle'), 1500);
 
     } catch (err) {
       console.error('Failed to save highlight:', err);
       setSaveStatus('error');
-      addToast(`Error saving: ${err.message}`, 'danger');
+      addToast(`Error: ${err.message}`, 'danger');
       setTimeout(() => setSaveStatus('idle'), 3000);
+    }
+  };
+
+  const handleRemoveHighlight = async () => {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed || !currentBook?.path) {
+      addToast('Select text over highlights to erase them', 'info');
+      return;
+    }
+
+    const range = selection.getRangeAt(0);
+    const rects = Array.from(range.getClientRects());
+    
+    if (rects.length === 0) return;
+
+    try {
+      setSaveStatus('saving');
+      
+      const { readFile, writeFile } = await import('@tauri-apps/plugin-fs');
+      const { PDFDocument, PDFName, PDFArray, PDFDict } = await import('pdf-lib');
+
+      const existingPdfBytes = await readFile(currentBook.path);
+      const pdfDoc = await PDFDocument.load(existingPdfBytes);
+
+      // Create bounding boxes for our selection rects in PDF points per page
+      const selectionBoxesByPage = {};
+
+      for (const r of rects) {
+        const centerX = r.left + r.width / 2;
+        const centerY = r.top + r.height / 2;
+        const elementAtPoint = document.elementFromPoint(centerX, centerY);
+        const span = elementAtPoint?.closest('.textLayer span[data-page]');
+        if (!span) continue;
+
+        const pageNum = parseInt(span.getAttribute('data-page'));
+        const pageWrapper = span.closest('.pdf-viewport-wrapper, .isr-page-wrapper');
+        if (!pageWrapper) continue;
+
+        const pageRect = pageWrapper.getBoundingClientRect();
+        const origWidth = parseFloat(pageWrapper.getAttribute('data-pdf-pw') || '612');
+        const origHeight = parseFloat(pageWrapper.getAttribute('data-pdf-ph') || '792');
+        const currentScale = pageRect.width / origWidth;
+
+        const dx = (r.left - pageRect.left) / currentScale;
+        const dy_top = (r.top - pageRect.top) / currentScale;
+        const dw = r.width / currentScale;
+        const dh = r.height / currentScale;
+        const dy = origHeight - dy_top - dh;
+
+        if (!selectionBoxesByPage[pageNum]) selectionBoxesByPage[pageNum] = [];
+        selectionBoxesByPage[pageNum].push({ x1: dx, y1: dy, x2: dx + dw, y2: dy + dh, span });
+      }
+
+      let removedCount = 0;
+
+      for (const [pageNumStr, sBoxes] of Object.entries(selectionBoxesByPage)) {
+        const pageNum = parseInt(pageNumStr);
+        const pageIndex = pageNum - 1;
+        if (pageIndex < 0 || pageIndex >= pdfDoc.getPageCount()) continue;
+        
+        const pdfPage = pdfDoc.getPage(pageIndex);
+        const annots = pdfPage.node.lookup(PDFName.of('Annots'));
+        
+        if (annots instanceof PDFArray) {
+          for (let i = annots.size() - 1; i >= 0; i--) {
+            const annot = annots.lookup(i);
+            if (annot instanceof PDFDict) {
+              const subtype = annot.lookup(PDFName.of('Subtype'));
+              if (subtype === PDFName.of('Highlight')) {
+                const rect = annot.lookup(PDFName.of('Rect'));
+                if (rect instanceof PDFArray && rect.size() === 4) {
+                  const [ax1, ay1, ax2, ay2] = rect.asArray().map(n => n.asNumber());
+                  
+                  // Check intersection with any of our selection boxes on this page
+                  const BUFFER = 3;
+                  const intersects = sBoxes.some(sBox => {
+                    const overlapX = Math.max(0, Math.min(ax2, sBox.x2) - Math.max(ax1, sBox.x1));
+                    const overlapY = Math.max(0, Math.min(ay2, sBox.y2) - Math.max(ay1, sBox.y1));
+                    const areaOverlap = overlapX * overlapY;
+                    const areaAnnot = (ax2 - ax1) * (ay2 - ay1);
+                    return areaOverlap > areaAnnot * 0.3 || // Significant overlap
+                           (overlapX > (ax2 - ax1) * 0.5 && overlapY > 2); // Center-cut
+                  });
+
+                  if (intersects) {
+                    annots.remove(i);
+                    removedCount++;
+                  }
+                }
+              }
+            }
+          }
+        }
+        
+        // Clear UI highlights for involved spans
+        sBoxes.forEach(s => {
+          s.span.style.background = '';
+          s.span.classList.remove('pdf-highlighted-precise');
+          s.span.classList.remove('pdf-highlighted'); // fallback for old ones
+        });
+      }
+
+      if (removedCount > 0) {
+        const pdfBytes = await pdfDoc.save();
+        await writeFile(currentBook.path, pdfBytes);
+        setSaveStatus('success');
+        addToast(`Cleared ${removedCount} highlight segments`, 'success');
+      } else {
+        setSaveStatus('idle');
+        addToast('No highlights found in that specific area', 'info');
+      }
+      
+      selection.removeAllRanges();
+      setTimeout(() => setSaveStatus('idle'), 1500);
+
+    } catch (err) {
+      console.error('Failed to remove highlight:', err);
+      setSaveStatus('error');
+      addToast(`Error: ${err.message}`, 'danger');
+      setTimeout(() => setSaveStatus('idle'), 3000);
+    }
+  };
+
+  const handleEraseHighlight = async () => {
+    if (!selectedHighlight || !currentBook?.path) return;
+    
+    try {
+      setSaveStatus('saving');
+      const { readFile, writeFile } = await import('@tauri-apps/plugin-fs');
+      const { PDFDocument, PDFName, PDFArray, PDFDict } = await import('pdf-lib');
+
+      const bytes = await readFile(currentBook.path);
+      const pdfDoc = await PDFDocument.load(bytes);
+      const pageIndex = selectedHighlight.page - 1;
+      
+      if (pageIndex < 0 || pageIndex >= pdfDoc.getPageCount()) {
+        throw new Error('Invalid page index');
+      }
+      
+      const pdfPage = pdfDoc.getPage(pageIndex);
+      const annots = pdfPage.node.lookup(PDFName.of('Annots'));
+      
+      if (annots instanceof PDFArray) {
+        let foundIndex = -1;
+        for (let i = 0; i < annots.size(); i++) {
+          const annot = annots.lookup(i);
+          if (annot instanceof PDFDict) {
+            const rect = annot.lookup(PDFName.of('Rect'));
+            if (rect instanceof PDFArray && rect.size() === 4) {
+              const [ax1, ay1, ax2, ay2] = rect.asArray().map(n => n.asNumber());
+              const [sx1, sy1, sx2, sy2] = selectedHighlight.rect;
+              
+              // Floating point tolerance
+              const match = Math.abs(ax1 - sx1) < 0.1 && 
+                            Math.abs(ay1 - sy1) < 0.1 && 
+                            Math.abs(ax2 - sx2) < 0.1 && 
+                            Math.abs(ay2 - sy2) < 0.1;
+              
+              if (match) {
+                foundIndex = i;
+                break;
+              }
+            }
+          }
+        }
+        
+        if (foundIndex !== -1) {
+          annots.remove(foundIndex);
+          const pdfBytes = await pdfDoc.save();
+          await writeFile(currentBook.path, pdfBytes);
+          
+          addToast('Highlight erased permanently', 'success');
+          setSelectedHighlight(null);
+          setSaveStatus('success');
+          setTimeout(() => setSaveStatus('idle'), 1500);
+        } else {
+          addToast('Highlight not found in PDF structure', 'info');
+          setSaveStatus('idle');
+          setSelectedHighlight(null);
+        }
+      } else {
+        addToast('No annotations found on this page', 'info');
+        setSaveStatus('idle');
+      }
+    } catch (err) {
+      console.error('Failed to erase highlight:', err);
+      addToast(`Eraser Error: ${err.message}`, 'danger');
+      setSaveStatus('idle');
     }
   };
 
@@ -323,6 +642,21 @@ const ReaderView = () => {
           setDictQuery(prev => prev && prev.word === word ? { ...prev, loading: false, error: 'Definition not found.' } : prev);
         }
       } else {
+        if (selection.isCollapsed) {
+          // Transparent Hit-Testing (since annoLayer is behind textLayer for selection priority)
+          const elements = document.elementsFromPoint(e.clientX, e.clientY);
+          const overlay = elements.find(el => el.classList.contains('pdf-anno-overlay'));
+          
+          if (overlay) {
+            // Overlays in ISR/Renderer have an onclick that sets the highlight
+            overlay.click();
+          } else {
+            if (!e.target.closest('.dictionary-popover')) {
+              setSelectedHighlight(null);
+            }
+          }
+        }
+        
         if (e.target.closest('.dictionary-popover')) return;
         setDictQuery(null);
       }
@@ -384,24 +718,28 @@ const ReaderView = () => {
       <main className={`reader-content ${infiniteScroll ? 'reader-content-isr' : 'reader-content-single'}`} ref={infiniteScroll ? undefined : contentRef}>
         {bookPath ? (
           <div className="pdf-wrapper">
-            {infiniteScroll ? (
-              <InfiniteScrollReader
-                ref={readerRef}
-                filePath={bookPath}
-                scale={scale}
-                showGlow={settings.pageGlow}
-                onPageChange={handlePageChange}
-                onTotalPages={handleTotalPages}
-                filter={combinedFilter}
-              />
-            ) : (
-              <PdfRenderer
-                filePath={bookPath}
-                scale={scale}
-                pageNumber={page}
-                showGlow={settings.pageGlow}
-                filter={combinedFilter}
-                onPageLoad={(pdfPage, viewport, numPages) => {
+             {infiniteScroll ? (
+               <InfiniteScrollReader
+                 ref={readerRef}
+                 filePath={bookPath}
+                 scale={scale}
+                 showGlow={settings.pageGlow}
+                 onPageChange={handlePageChange}
+                 onTotalPages={handleTotalPages}
+                 filter={combinedFilter}
+                 onHighlightClick={setSelectedHighlight}
+                 selectedHighlight={selectedHighlight}
+               />
+             ) : (
+               <PdfRenderer
+                 filePath={bookPath}
+                 scale={scale}
+                 pageNumber={page}
+                 showGlow={settings.pageGlow}
+                 filter={combinedFilter}
+                 onHighlightClick={setSelectedHighlight}
+                 selectedHighlight={selectedHighlight}
+                 onPageLoad={(pdfPage, viewport, numPages) => {
                   if (numPages && bookPath && numPages !== totalPagesMap[bookPath]) {
                     setBookTotalPages(bookPath, numPages);
                     setTotalPages(numPages);
@@ -449,14 +787,23 @@ const ReaderView = () => {
                 {pdfNightMode ? <Sun size={16} /> : <Moon size={16} />}
               </button>
             </Tooltip>
-            <Tooltip content="Highlight Selection (H)" position="bottom">
-              <button 
-                className={`icon-btn-sm highlight-btn ${saveStatus === 'success' ? 'status-success' : ''} ${saveStatus === 'saving' ? 'status-saving' : ''}`} 
-                onClick={handleSaveHighlight}
-              >
-                {saveStatus === 'success' ? <Check size={16} className="animate-pop" /> : <Highlighter size={16} />}
-              </button>
-            </Tooltip>
+            {settings.enableHighlighting !== false && (
+              <>
+                <Tooltip content="Highlight Selection (H)" position="bottom">
+                  <button 
+                    className={`icon-btn-sm highlight-btn ${saveStatus === 'success' ? 'status-success' : ''} ${saveStatus === 'saving' ? 'status-saving' : ''}`} 
+                    onClick={handleSaveHighlight}
+                  >
+                    {saveStatus === 'success' ? <Check size={16} className="animate-pop" /> : <Highlighter size={16} />}
+                  </button>
+                </Tooltip>
+                <Tooltip content="Remove Highlight (X)" position="bottom">
+                  <button className="icon-btn-sm" onClick={handleRemoveHighlight}>
+                    <Eraser size={16} />
+                  </button>
+                </Tooltip>
+              </>
+            )}
             <div className="ctrl-divider" />
 
             <div className="ctrl-brightness-group">
@@ -507,6 +854,22 @@ const ReaderView = () => {
                 <ChevronRight size={16} />
               </button>
             </Tooltip>
+
+            {settings.enableHighlighting !== false && (
+              <>
+                <div className="ctrl-divider" />
+                <Tooltip content={selectedHighlight ? "Erase Selected (Del)" : "Select a highlight to erase"}>
+                  <button 
+                    className={`icon-btn-md highlight-btn ${saveStatus === 'saving' ? 'status-saving' : ''} ${selectedHighlight ? 'pulse-active' : ''}`}
+                    onClick={handleEraseHighlight}
+                    disabled={saveStatus === 'saving' || !selectedHighlight}
+                    style={{ color: selectedHighlight ? 'var(--ink-danger)' : 'inherit' }}
+                  >
+                    <Eraser size={18} />
+                  </button>
+                </Tooltip>
+              </>
+            )}
 
             <div className="ctrl-divider" />
 

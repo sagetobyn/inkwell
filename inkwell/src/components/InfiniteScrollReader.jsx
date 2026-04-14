@@ -1,7 +1,9 @@
 import React, {
-  useEffect, useRef, useState, useCallback, useMemo, forwardRef, useImperativeHandle
+  useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo, forwardRef, useImperativeHandle
 } from 'react';
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
+import { convertFileSrc } from '@tauri-apps/api/core';
+import { revealItemInDir } from '@tauri-apps/plugin-opener';
 import pdfWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker.mjs?url';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
@@ -19,9 +21,16 @@ const PDF_OPTIONS = {
 // ─── Single Page Renderer ───────────────────────────────────────────────────
 // Renders one page onto a canvas with a text layer overlay.
 // Optimized with CSS scaling for intermediate zoom levels.
-const PageCanvas = React.memo(({ pdf, pageNum, scale, showGlow }) => {
+const PageCanvas = React.memo(({ 
+  pdf, pageNum, scale, showGlow, 
+  originalWidth, originalHeight,
+  originalOx, originalOy,
+  onHighlightClick, selectedHighlight
+}) => {
   const canvasRef = useRef(null);
   const wrapperRef = useRef(null);
+  const textLayerRef = useRef(null);
+  const annoLayerRef = useRef(null);
   const renderTaskRef = useRef(null);
   const [dim, setDim] = useState({ width: 612, height: 792 });
   const [rendered, setRendered] = useState(false);
@@ -67,18 +76,12 @@ const PageCanvas = React.memo(({ pdf, pageNum, scale, showGlow }) => {
 
         // ── Text Layer ──
         const textContent = await page.getTextContent();
-        const wrapper = wrapperRef.current;
-        if (!wrapper) return;
+        const textLayer = textLayerRef.current;
+        if (!textLayer) return;
 
-        wrapper.querySelectorAll('.textLayer').forEach(el => el.remove());
-        const textDiv = document.createElement('div');
-        textDiv.className = 'textLayer';
-        textDiv.style.cssText = `
-          position: absolute; top: 0; left: 0;
-          width: ${w}px; height: ${h}px;
-          pointer-events: auto; overflow: hidden;
-          transform-origin: 0 0;
-        `;
+        textLayer.innerHTML = '';
+        textLayer.style.width = `${w}px`;
+        textLayer.style.height = `${h}px`;
 
         const fragment = document.createDocumentFragment();
         const measureCanvas = document.createElement('canvas');
@@ -138,12 +141,14 @@ const PageCanvas = React.memo(({ pdf, pageNum, scale, showGlow }) => {
             span.setAttribute('data-pdf-y', item.transform[5]);
             span.setAttribute('data-pdf-w', item.width);
             span.setAttribute('data-pdf-h', item.transform[3]);
-            span.setAttribute('data-page', pageIndex + 1);
+            span.setAttribute('data-page', pageNum);
 
-            const itemTop = item.tx[5] - item.fontHeight * 0.8;
+            const itemTopOffset = item.tx[5] - item.fontHeight * 0.8;
             span.style.cssText = `
               position: absolute;
-              left: ${item.tx[4]}px; top: ${itemTop - lineTop}px;
+              left: ${item.tx[4]}px; top: 0;
+              height: 100%; padding-top: ${itemTopOffset - lineTop}px;
+              box-sizing: border-box;
               font-size: ${item.fontHeight}px; font-family: serif, sans-serif;
               color: transparent; white-space: pre; line-height: 1;
               transform-origin: 0 0; cursor: text;
@@ -157,9 +162,56 @@ const PageCanvas = React.memo(({ pdf, pageNum, scale, showGlow }) => {
             }
             lineDiv.appendChild(span);
           });
-          textDiv.appendChild(lineDiv);
+          textLayer.appendChild(lineDiv);
         });
-        wrapper.appendChild(textDiv);
+        
+        // --- Phase 10: Annotation Layer (Interactive Highlights) ---
+        const annots = await page.getAnnotations();
+        const annoLayer = annoLayerRef.current;
+        if (annoLayer && active) {
+          annoLayer.innerHTML = '';
+          annoLayer.style.width = `${w}px`;
+          annoLayer.style.height = `${h}px`;
+          
+          annots.filter(a => a.subtype === 'Highlight').forEach(anno => {
+            const pdfRect = anno.rect; // [x1, y1, x2, y2]
+            const rect = viewport.convertToViewportRectangle(pdfRect);
+            
+            const overlay = document.createElement('div');
+            overlay.className = 'pdf-anno-overlay';
+            
+            const color = anno.color ? `rgba(${anno.color[0]}, ${anno.color[1]}, ${anno.color[2]}, 0.2)` : 'rgba(255, 226, 0, 0.2)';
+            overlay.style.position = 'absolute';
+            overlay.style.left = `${rect[0]}px`;
+            overlay.style.top = `${rect[1]}px`;
+            overlay.style.width = `${rect[2] - rect[0]}px`;
+            overlay.style.height = `${rect[3] - rect[1]}px`;
+            overlay.style.backgroundColor = color;
+            overlay.style.cursor = 'pointer';
+            overlay.style.pointerEvents = 'auto';
+            overlay.style.zIndex = '3';
+            
+            const isSelected = selectedHighlight && 
+                              selectedHighlight.page === pageNum && 
+                              selectedHighlight.rect.every((v, i) => Math.abs(v - pdfRect[i]) < 0.1);
+            
+            if (isSelected) overlay.classList.add('selected');
+            
+            overlay.onclick = (e) => {
+              e.stopPropagation();
+              if (onHighlightClick) {
+                onHighlightClick({
+                  page: pageNum,
+                  rect: pdfRect,
+                  color: anno.color,
+                  id: anno.id
+                });
+              }
+            };
+            
+            annoLayer.appendChild(overlay);
+          });
+        }
       } catch (err) {
         if (err.name !== 'RenderingCancelledException') {
           console.error(`Page ${pageNum} render error:`, err);
@@ -194,6 +246,10 @@ const PageCanvas = React.memo(({ pdf, pageNum, scale, showGlow }) => {
     <div
       ref={wrapperRef}
       className="isr-page-wrapper"
+      data-pdf-pw={originalWidth}
+      data-pdf-ph={originalHeight}
+      data-pdf-ox={originalOx}
+      data-pdf-oy={originalOy}
       style={{
         position: 'relative',
         width: `${displayWidth}px`,
@@ -224,6 +280,37 @@ const PageCanvas = React.memo(({ pdf, pageNum, scale, showGlow }) => {
           willChange: 'transform',
         }}
       />
+      <div 
+        ref={textLayerRef}
+        className="textLayer"
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: `${dim.width}px`,
+          height: `${dim.height}px`,
+          transform: `scale(${displayScale})`,
+          transformOrigin: '0 0',
+          pointerEvents: 'auto',
+          zIndex: 3,
+          userSelect: 'text'
+        }}
+      />
+      <div 
+        ref={annoLayerRef}
+        className="annoLayer"
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: `${dim.width}px`,
+          height: `${dim.height}px`,
+          transform: `scale(${displayScale})`,
+          transformOrigin: '0 0',
+          pointerEvents: 'none',
+          zIndex: 2
+        }}
+      />
     </div>
   );
 });
@@ -232,7 +319,8 @@ PageCanvas.displayName = 'PageCanvas';
 
 // ─── Infinite Scroll Reader ─────────────────────────────────────────────────
 const InfiniteScrollReader = React.memo(forwardRef(({
-  filePath, scale, showGlow, onPageChange, onTotalPages, filter
+  filePath, scale, showGlow, onPageChange, onTotalPages, filter,
+  onHighlightClick, selectedHighlight
 }, ref) => {
   const [pdf, setPdf] = useState(null);
   const [totalPages, setTotalPages] = useState(0);
@@ -247,6 +335,8 @@ const InfiniteScrollReader = React.memo(forwardRef(({
   const pageRefs = useRef([]); // kept for scrollToPage logic
   const currentPageRef = useRef(1);
   const lastScrollTop = useRef(0);
+  const prevScaleRef = useRef(scale);
+
 
   // ── Load PDF ──────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -267,7 +357,10 @@ const InfiniteScrollReader = React.memo(forwardRef(({
             const data = await readFile(filePath);
             loadingTask = pdfjsLib.getDocument({ data, ...PDF_OPTIONS });
           } catch (fsErr) {
-            loadingTask = pdfjsLib.getDocument({ url: filePath, ...PDF_OPTIONS });
+            console.error('[ISR] FS error fallback:', fsErr);
+            const normalizedPath = filePath.replace(/\\/g, '/');
+            const assetUrl = convertFileSrc(normalizedPath);
+            loadingTask = pdfjsLib.getDocument({ url: assetUrl, ...PDF_OPTIONS });
           }
         }
         const doc = await loadingTask.promise;
@@ -289,7 +382,9 @@ const InfiniteScrollReader = React.memo(forwardRef(({
           pageMetrics.push({
             height: h,
             width: viewport.width,
-            top: currentTop
+            top: currentTop,
+            ox: viewport.viewBox[0],
+            oy: viewport.viewBox[1]
           });
           currentTop += h + PAGE_GAP;
         }
@@ -326,7 +421,10 @@ const InfiniteScrollReader = React.memo(forwardRef(({
     }
   }, [metrics, scale]);
 
-  useImperativeHandle(ref, () => ({ scrollToPage }), [scrollToPage]);
+  useImperativeHandle(ref, () => ({ 
+    scrollToPage,
+    getScrollContainer: () => scrollContainerRef.current
+  }), [scrollToPage]);
 
   // ── Optimized Visibility Tracking ─────────────────────────────────────────
   // ── Optimized scroll-based virtualization ─────────────────────────────────
@@ -383,6 +481,35 @@ const InfiniteScrollReader = React.memo(forwardRef(({
     }
   }, [metrics, scale, onPageChange]);
 
+  // ── Zoom Anchor Alignment ────────────────────────────────────────────────
+  // Prevents "jumping" to a different page when zooming.
+  // Anchors the zoom center to the middle of the current viewport.
+  useLayoutEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container || prevScaleRef.current === scale || !metrics.length) {
+      prevScaleRef.current = scale;
+      return;
+    }
+
+    const oldScale = prevScaleRef.current;
+    const newScale = scale;
+    prevScaleRef.current = newScale;
+
+    const scrollTop = container.scrollTop;
+    const viewHeight = container.clientHeight;
+
+    // Calculate current center in unscaled coordinates
+    const centerUnscaled = (scrollTop + viewHeight / 2) / oldScale;
+    
+    // Target scroll top to keep that center point in the middle
+    const newScrollTop = (centerUnscaled * newScale) - viewHeight / 2;
+
+    container.scrollTop = newScrollTop;
+    
+    // Immediately update visibility range to prevent flicker of wrong pages
+    updateVisibleRange();
+  }, [scale, metrics.length, updateVisibleRange]);
+
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
@@ -409,6 +536,20 @@ const InfiniteScrollReader = React.memo(forwardRef(({
         <div className="pdf-error-card">
           <div className="pdf-error-icon">!</div>
           <p className="pdf-error-msg">PDF Load Error: {error}</p>
+          {filePath && /^[a-zA-Z]:/.test(filePath) && (
+            <button
+              className="pdf-error-action-btn"
+              onClick={async () => {
+                try {
+                  await revealItemInDir(filePath);
+                } catch (err) {
+                  console.error("Failed to wake drive:", err);
+                }
+              }}
+            >
+              Wake Drive (Google Drive / Cloud)
+            </button>
+          )}
         </div>
       </div>
     );
@@ -435,6 +576,12 @@ const InfiniteScrollReader = React.memo(forwardRef(({
             pageNum={pageNum}
             scale={scale}
             showGlow={showGlow}
+            originalWidth={metrics[i].width}
+            originalHeight={metrics[i].height}
+            originalOx={metrics[i].ox}
+            originalOy={metrics[i].oy}
+            onHighlightClick={onHighlightClick}
+            selectedHighlight={selectedHighlight}
           />
         </div>
       );

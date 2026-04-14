@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import './components/components.css';
 import './App.css';
+import TitleBar from './components/TitleBar';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -122,13 +123,11 @@ const AppContent = () => {
     return cmds;
   }, [currentView, theme, pdfNightMode]);
 
-  // Apply UI density as data attribute
-  useEffect(() => {
-    document.documentElement.dataset.density = settings.uiDensity || 'comfortable';
-  }, [settings.uiDensity]);
+
 
   return (
     <div className={`app-container ${isSettingsWindow ? 'settings-window-active' : ''}`}>
+      <TitleBar />
       {/* Global Background for Skinning */}
       <div className="app-bg-container" />
       
